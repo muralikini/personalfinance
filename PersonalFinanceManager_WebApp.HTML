@@ -1,0 +1,3136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Finance Manager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #f4f6f9;
+            --card: #ffffff;
+            --text: #1f2937;
+            --border: #e2e8f0;
+        }
+        body.dark {
+            --bg: #0f172a;
+            --card: #1e2937;
+            --text: #e2e8f0;
+            --border: #334155;
+        }
+
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            background: var(--bg); 
+            color: var(--text); 
+            transition: background 0.3s;
+        }
+        header { 
+            background: #1e3a8a; 
+            color: white; 
+            padding: 15px; 
+            text-align: center; 
+        }
+        .container { max-width: 1400px; margin: 20px auto; padding: 20px; }
+        .tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 20px; }
+        .tab { 
+            padding: 12px 20px; 
+            background: #e2e8f0; 
+            border: none; 
+            cursor: pointer; 
+            border-radius: 8px 8px 0 0; 
+            font-weight: bold; 
+        }
+        body.dark .tab { background: #334155; color: #cbd5e1; }
+        .tab.active { background: #1e3a8a; color: white; }
+        .content { 
+            background: var(--card); 
+            padding: 25px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; border: 1px solid var(--border); text-align: left; }
+        th { background: #f1f5f9; }
+        body.dark th { background: #334155; }
+        .btn { 
+            padding: 10px 18px; 
+            margin: 5px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+        .btn-add { background: #10b981; color: white; }
+        .btn-export { background: #8b5cf6; color: white; }
+        .form-container { 
+            background: #f8fafc; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin: 15px 0; 
+            display: none; 
+        }
+        body.dark .form-container { background: #334155; }
+        .dashboard-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+            gap: 20px; 
+            margin: 20px 0; 
+        }
+        .card { 
+            background: var(--card); 
+            padding: 20px; 
+            border-radius: 10px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+        }
+        .big-number { font-size: 2.4rem; font-weight: bold; margin: 10px 0; }
+        .chart-container { margin: 25px 0; }
+    </style>
+</head>
+<body>
+    <header>
+       <h1>Personal Finance Manager</h1>
+        <button onclick="toggleDarkMode()" style="position:absolute; top:15px; right:20px; padding:8px 16px; background:#334155; color:white; border:none; border-radius:5px; cursor:pointer;">
+            🌙 Dark Mode
+        </button>
+    </header>
+
+    <div class="container">
+        <div class="tabs" id="tabs"></div>
+        <div class="content" id="content"></div>
+    </div>
+
+    <script>
+       let currentTab = 'dashboard';
+        let isDarkMode = localStorage.getItem('darkMode') === 'true';
+
+        // Apply saved theme
+        if (isDarkMode) document.body.classList.add('dark');
+
+        function toggleDarkMode() {
+            isDarkMode = !isDarkMode;
+            document.body.classList.toggle('dark', isDarkMode);
+            localStorage.setItem('darkMode', isDarkMode);
+        }
+
+
+        let bankAccounts = JSON.parse(localStorage.getItem('bankAccounts')) || [];
+        let fixedDeposits = JSON.parse(localStorage.getItem('fixedDeposits')) || [];
+        let recurringDeposits = JSON.parse(localStorage.getItem('recurringDeposits')) || [];
+        let equityHoldings = JSON.parse(localStorage.getItem('equityHoldings')) || [];
+        let mutualFunds = JSON.parse(localStorage.getItem('mutualFunds')) || [];
+        let etfs = JSON.parse(localStorage.getItem('etfs')) || [];
+        let bullion = JSON.parse(localStorage.getItem('bullion')) || [];
+        let realEstate = JSON.parse(localStorage.getItem('realEstate')) || [];
+        let insurance = JSON.parse(localStorage.getItem('insurance')) || [];
+        let cards = JSON.parse(localStorage.getItem('cards')) || [];
+        let npsAccounts = JSON.parse(localStorage.getItem('npsAccounts')) || [];
+        let cashHoldings = JSON.parse(localStorage.getItem('cashHoldings')) || [];
+        let collections = JSON.parse(localStorage.getItem('collections')) || [];
+        let debts = JSON.parse(localStorage.getItem('debts')) || [];
+
+        const modules = [
+            { id: 'dashboard', name: 'Dashboard' },
+            { id: 'bank', name: 'Bank Accounts' },
+            { id: 'fd', name: 'Fixed Deposits' },
+            { id: 'rd', name: 'Recurring Deposits' },
+            { id: 'equity', name: 'Equity Holdings' },
+            { id: 'mf', name: 'Mutual Funds' },
+            { id: 'etf', name: 'ETFs' },
+            { id: 'bullion', name: 'Bullion & Gold/Silver' },
+            { id: 'realestate', name: 'Real Estate' },
+            { id: 'cards', name: 'Cards' },
+            { id: 'insurance', name: 'Insurance' },
+            { id: 'nps', name: 'NPS' },
+            { id: 'cash', name: 'Cash Holdings' },
+            { id: 'collections', name: 'Collections' },
+            { id: 'debts', name: 'Debts' },
+            { id: 'calculator', name: 'Calculators' }
+        ];
+
+        function saveData() {
+            localStorage.setItem('bankAccounts', JSON.stringify(bankAccounts));
+            localStorage.setItem('fixedDeposits', JSON.stringify(fixedDeposits));
+            localStorage.setItem('recurringDeposits', JSON.stringify(recurringDeposits));
+            localStorage.setItem('equityHoldings', JSON.stringify(equityHoldings));
+            localStorage.setItem('mutualFunds', JSON.stringify(mutualFunds));
+            localStorage.setItem('etfs', JSON.stringify(etfs));
+            localStorage.setItem('bullion', JSON.stringify(bullion));
+            localStorage.setItem('realEstate', JSON.stringify(realEstate));
+            localStorage.setItem('insurance', JSON.stringify(insurance));
+            localStorage.setItem('cards', JSON.stringify(cards));
+            localStorage.setItem('npsAccounts', JSON.stringify(npsAccounts));
+            localStorage.setItem('cashHoldings', JSON.stringify(cashHoldings));
+            localStorage.setItem('collections', JSON.stringify(collections));
+            localStorage.setItem('debts', JSON.stringify(debts));
+        }
+
+        
+
+        function renderTabs() {
+            const tabsDiv = document.getElementById('tabs');
+            tabsDiv.innerHTML = '';
+            modules.forEach(mod => {
+                const btn = document.createElement('button');
+                btn.className = `tab ${mod.id === currentTab ? 'active' : ''}`;
+                btn.textContent = mod.name;
+                btn.onclick = () => {
+                    currentTab = mod.id;
+                    renderTabs();
+                    renderContent();
+                };
+                tabsDiv.appendChild(btn);
+            });
+        }
+
+        function renderContent() {
+            const content = document.getElementById('content');
+            content.innerHTML = `<h2>${modules.find(m => m.id === currentTab).name}</h2>`;
+
+            if (currentTab === 'bank') renderBankAccounts();
+            else if (currentTab === 'fd') renderFixedDeposits();
+            else if (currentTab === 'rd') renderRecurringDeposits();
+            else if (currentTab === 'equity') renderEquityHoldings();
+            else if (currentTab === 'mf') renderMutualFunds();
+            else if (currentTab === 'etf') renderETFs();
+            else if (currentTab === 'bullion') renderBullion();
+            else if (currentTab === 'realestate') renderRealEstate();
+            else if (currentTab === 'insurance') renderInsurance();
+            else if (currentTab === 'dashboard') renderDashboard();
+            else if (currentTab === 'cards') renderCards();
+            else if (currentTab === 'nps') renderNPS();
+            else if (currentTab === 'cash') renderCashHoldings();
+            else if (currentTab === 'collections') renderCollections();
+            else if (currentTab === 'debts') renderDebts();
+            else if (currentTab === 'calculator') renderCalculators();
+            else {
+                content.innerHTML += `<p><em>This module is coming soon...</em></p>`;
+            }
+        }
+
+        // ====================== BANK ACCOUNTS ======================
+
+        function renderBankAccounts() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddBankForm()">+ Add New Bank Account</button>
+                
+                <div class="form-container" id="bankForm">
+                    <h3 id="formTitle">Add New Bank Account</h3>
+                    <div class="form-group">
+                        <label>Bank Name</label>
+                        <input type="text" id="bankName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Account Number</label>
+                        <input type="text" id="accountNo" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Holder Name</label>
+                        <input type="text" id="holderName" value="Personal Finance">
+                    </div>
+                    <div class="form-group">
+                        <label>Current Balance (₹)</label>
+                        <input type="number" id="balance" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Opening Date</label>
+                        <input type="date" id="openingDate">
+                    </div>
+                    <button class="btn btn-add" onclick="saveBankAccount()">Save Account</button>
+                    <button class="btn" onclick="hideForm()">Cancel</button>
+                </div>
+
+                <h3>Bank Accounts List</h3>
+                <table id="bankTable">
+                    <thead>
+                        <tr>
+                            <th>Bank Name</th>
+                            <th>Account No</th>
+                            <th>Holder</th>
+                            <th>Balance (₹)</th>
+                            <th>Opening Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadBankTable();
+        }
+
+        function showAddBankForm(editId = null) {
+            document.getElementById('bankForm').style.display = 'block';
+            document.getElementById('formTitle').textContent = editId ? 'Edit Bank Account' : 'Add New Bank Account';
+            
+            if (editId) {
+                const account = bankAccounts.find(a => a.id === editId);
+                if (account) {
+                    document.getElementById('bankName').value = account.bankName;
+                    document.getElementById('accountNo').value = account.accountNo;
+                    document.getElementById('holderName').value = account.holderName;
+                    document.getElementById('balance').value = account.balance;
+                    document.getElementById('openingDate').value = account.openingDate || '';
+                    window.currentEditId = editId;
+                }
+            } else {
+                document.getElementById('bankName').value = '';
+                document.getElementById('accountNo').value = '';
+                document.getElementById('holderName').value = 'Personal Finance';
+                document.getElementById('balance').value = '';
+                document.getElementById('openingDate').value = '';
+                window.currentEditId = null;
+            }
+        }
+
+        function hideForm() {
+            document.getElementById('bankForm').style.display = 'none';
+        }
+
+        function saveBankAccount() {
+            const bankName = document.getElementById('bankName').value.trim();
+            const accountNo = document.getElementById('accountNo').value.trim();
+            const holderName = document.getElementById('holderName').value.trim();
+            const balance = parseFloat(document.getElementById('balance').value);
+            const openingDate = document.getElementById('openingDate').value;
+
+            if (!bankName || !accountNo || isNaN(balance)) {
+                alert("Please fill all required fields correctly.");
+                return;
+            }
+
+            if (window.currentEditId) {
+                // Edit existing
+                const account = bankAccounts.find(a => a.id === window.currentEditId);
+                if (account) {
+                    account.bankName = bankName;
+                    account.accountNo = accountNo;
+                    account.holderName = holderName;
+                    account.balance = balance;
+                    account.openingDate = openingDate;
+                }
+            } else {
+                // Add new
+                bankAccounts.push({
+                    id: Date.now(),
+                    bankName,
+                    accountNo,
+                    holderName,
+                    balance,
+                    openingDate
+                });
+            }
+
+            saveData();
+            hideForm();
+            loadBankTable();
+        }
+
+        function loadBankTable() {
+            const tbody = document.querySelector('#bankTable tbody');
+            tbody.innerHTML = '';
+
+            if (bankAccounts.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No bank accounts added yet.</td></tr>`;
+                return;
+            }
+
+            bankAccounts.forEach(account => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${account.bankName}</td>
+                    <td>${account.accountNo}</td>
+                    <td>${account.holderName}</td>
+                    <td style="font-weight:bold; color:green;">₹${parseFloat(account.balance).toLocaleString('en-IN')}</td>
+                    <td>${account.openingDate || '-'}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddBankForm(${account.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteBankAccount(${account.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function deleteBankAccount(id) {
+            if (confirm("Are you sure you want to delete this bank account?")) {
+                bankAccounts = bankAccounts.filter(a => a.id !== id);
+                saveData();
+                loadBankTable();
+            }
+        }
+
+        // ====================== FIXED DEPOSITS ======================
+        function renderFixedDeposits() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddFDForm()">+ Add New Fixed Deposit</button>
+                
+                <div class="form-container" id="fdForm">
+                    <h3 id="fdFormTitle">Add New Fixed Deposit</h3>
+                    <div class="form-group">
+                        <label>Bank Name</label>
+                        <input type="text" id="fdBank" required>
+                    </div>
+                    <div class="form-group">
+                        <label>FD Number</label>
+                        <input type="text" id="fdNo" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Principal Amount (₹)</label>
+                        <input type="number" id="fdAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Interest Rate (% p.a.)</label>
+                        <input type="number" id="fdRate" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Date</label>
+                        <input type="date" id="fdStartDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Maturity Date</label>
+                        <input type="date" id="fdMaturityDate">
+                    </div>
+                    <button class="btn btn-add" onclick="saveFD()">Save FD</button>
+                    <button class="btn" onclick="hideFDForm()">Cancel</button>
+                </div>
+
+                <h3>All Fixed Deposits</h3>
+                <table id="fdTable">
+                    <thead>
+                        <tr>
+                            <th>Bank</th>
+                            <th>FD No</th>
+                            <th>Amount (₹)</th>
+                            <th>Rate (%)</th>
+                            <th>Start Date</th>
+                            <th>Maturity Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadFDTable();
+        }
+
+        function showAddFDForm(editId = null) {
+            document.getElementById('fdForm').style.display = 'block';
+            document.getElementById('fdFormTitle').textContent = editId ? 'Edit Fixed Deposit' : 'Add New Fixed Deposit';
+            
+            if (editId) {
+                const fd = fixedDeposits.find(f => f.id === editId);
+                if (fd) {
+                    document.getElementById('fdBank').value = fd.bank;
+                    document.getElementById('fdNo').value = fd.fdNo;
+                    document.getElementById('fdAmount').value = fd.amount;
+                    document.getElementById('fdRate').value = fd.rate;
+                    document.getElementById('fdStartDate').value = fd.startDate || '';
+                    document.getElementById('fdMaturityDate').value = fd.maturityDate || '';
+                    window.currentEditFDId = editId;
+                }
+            } else {
+                document.getElementById('fdBank').value = '';
+                document.getElementById('fdNo').value = '';
+                document.getElementById('fdAmount').value = '';
+                document.getElementById('fdRate').value = '';
+                document.getElementById('fdStartDate').value = '';
+                document.getElementById('fdMaturityDate').value = '';
+                window.currentEditFDId = null;
+            }
+        }
+
+        function hideFDForm() {
+            document.getElementById('fdForm').style.display = 'none';
+        }
+
+        function saveFD() {
+            const bank = document.getElementById('fdBank').value.trim();
+            const fdNo = document.getElementById('fdNo').value.trim();
+            const amount = parseFloat(document.getElementById('fdAmount').value);
+            const rate = parseFloat(document.getElementById('fdRate').value);
+            const startDate = document.getElementById('fdStartDate').value;
+            const maturityDate = document.getElementById('fdMaturityDate').value;
+
+            if (!bank || !fdNo || isNaN(amount) || isNaN(rate)) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditFDId) {
+                const fd = fixedDeposits.find(f => f.id === window.currentEditFDId);
+                if (fd) {
+                    fd.bank = bank;
+                    fd.fdNo = fdNo;
+                    fd.amount = amount;
+                    fd.rate = rate;
+                    fd.startDate = startDate;
+                    fd.maturityDate = maturityDate;
+                }
+            } else {
+                fixedDeposits.push({
+                    id: Date.now(),
+                    bank, fdNo, amount, rate, startDate, maturityDate
+                });
+            }
+
+            saveData();
+            hideFDForm();
+            loadFDTable();
+        }
+
+        function loadFDTable() {
+            const tbody = document.querySelector('#fdTable tbody');
+            tbody.innerHTML = '';
+
+            if (fixedDeposits.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No Fixed Deposits added yet.</td></tr>`;
+                return;
+            }
+
+            let totalAmount = 0;
+
+            fixedDeposits.forEach(fd => {
+                totalAmount += parseFloat(fd.amount || 0);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${fd.bank}</td>
+                    <td>${fd.fdNo}</td>
+                    <td style="font-weight:bold; color:green;">₹${parseFloat(fd.amount).toLocaleString('en-IN')}</td>
+                    <td>${fd.rate}%</td>
+                    <td>${fd.startDate || '-'}</td>
+                    <td>${fd.maturityDate || '-'}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddFDForm(${fd.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteFD(${fd.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // Total Row
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="2"><strong>Total</strong></td>
+                <td><strong>₹${totalAmount.toLocaleString('en-IN')}</strong></td>
+                <td colspan="4"></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteFD(id) {
+            if (confirm("Delete this Fixed Deposit?")) {
+                fixedDeposits = fixedDeposits.filter(f => f.id !== id);
+                saveData();
+                loadFDTable();
+            }
+        }
+
+        
+        //==================== FIXED DEPOSITS ===========================
+
+        // ====================== RECURRING DEPOSITS ======================
+        function renderRecurringDeposits() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddRDForm()">+ Add New Recurring Deposit</button>
+                
+                <div class="form-container" id="rdForm">
+                    <h3 id="rdFormTitle">Add New Recurring Deposit</h3>
+                    <div class="form-group">
+                        <label>Bank Name</label>
+                        <input type="text" id="rdBank" required>
+                    </div>
+                    <div class="form-group">
+                        <label>RD Number</label>
+                        <input type="text" id="rdNo" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Monthly Installment (₹)</label>
+                        <input type="number" id="rdMonthly" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Interest Rate (% p.a.)</label>
+                        <input type="number" id="rdRate" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Date</label>
+                        <input type="date" id="rdStartDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Maturity Date</label>
+                        <input type="date" id="rdMaturityDate">
+                    </div>
+                    <button class="btn btn-add" onclick="saveRD()">Save RD</button>
+                    <button class="btn" onclick="hideRDForm()">Cancel</button>
+                </div>
+
+                <h3>All Recurring Deposits</h3>
+                <table id="rdTable">
+                    <thead>
+                        <tr>
+                            <th>Bank</th>
+                            <th>RD No</th>
+                            <th>Monthly (₹)</th>
+                            <th>Rate (%)</th>
+                            <th>Start Date</th>
+                            <th>Maturity Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadRDTable();
+        }
+
+        function showAddRDForm(editId = null) {
+            document.getElementById('rdForm').style.display = 'block';
+            document.getElementById('rdFormTitle').textContent = editId ? 'Edit Recurring Deposit' : 'Add New Recurring Deposit';
+            
+            if (editId) {
+                const rd = recurringDeposits.find(r => r.id === editId);
+                if (rd) {
+                    document.getElementById('rdBank').value = rd.bank;
+                    document.getElementById('rdNo').value = rd.rdNo;
+                    document.getElementById('rdMonthly').value = rd.monthly;
+                    document.getElementById('rdRate').value = rd.rate;
+                    document.getElementById('rdStartDate').value = rd.startDate || '';
+                    document.getElementById('rdMaturityDate').value = rd.maturityDate || '';
+                    window.currentEditRDId = editId;
+                }
+            } else {
+                document.getElementById('rdBank').value = '';
+                document.getElementById('rdNo').value = '';
+                document.getElementById('rdMonthly').value = '';
+                document.getElementById('rdRate').value = '';
+                document.getElementById('rdStartDate').value = '';
+                document.getElementById('rdMaturityDate').value = '';
+                window.currentEditRDId = null;
+            }
+        }
+
+        function hideRDForm() {
+            document.getElementById('rdForm').style.display = 'none';
+        }
+
+        function saveRD() {
+            const bank = document.getElementById('rdBank').value.trim();
+            const rdNo = document.getElementById('rdNo').value.trim();
+            const monthly = parseFloat(document.getElementById('rdMonthly').value);
+            const rate = parseFloat(document.getElementById('rdRate').value);
+            const startDate = document.getElementById('rdStartDate').value;
+            const maturityDate = document.getElementById('rdMaturityDate').value;
+
+            if (!bank || !rdNo || isNaN(monthly) || isNaN(rate)) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditRDId) {
+                const rd = recurringDeposits.find(r => r.id === window.currentEditRDId);
+                if (rd) {
+                    rd.bank = bank;
+                    rd.rdNo = rdNo;
+                    rd.monthly = monthly;
+                    rd.rate = rate;
+                    rd.startDate = startDate;
+                    rd.maturityDate = maturityDate;
+                }
+            } else {
+                recurringDeposits.push({
+                    id: Date.now(),
+                    bank, rdNo, monthly, rate, startDate, maturityDate
+                });
+            }
+
+            saveData();
+            hideRDForm();
+            loadRDTable();
+        }
+
+        function loadRDTable() {
+            const tbody = document.querySelector('#rdTable tbody');
+            tbody.innerHTML = '';
+
+            if (recurringDeposits.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No Recurring Deposits added yet.</td></tr>`;
+                return;
+            }
+
+            let totalMonthly = 0;
+
+            recurringDeposits.forEach(rd => {
+                totalMonthly += parseFloat(rd.monthly || 0);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${rd.bank}</td>
+                    <td>${rd.rdNo}</td>
+                    <td style="font-weight:bold; color:green;">₹${parseFloat(rd.monthly).toLocaleString('en-IN')}</td>
+                    <td>${rd.rate}%</td>
+                    <td>${rd.startDate || '-'}</td>
+                    <td>${rd.maturityDate || '-'}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddRDForm(${rd.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteRD(${rd.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="2"><strong>Total Monthly Commitment</strong></td>
+                <td><strong>₹${totalMonthly.toLocaleString('en-IN')}</strong></td>
+                <td colspan="4"></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteRD(id) {
+            if (confirm("Delete this Recurring Deposit?")) {
+                recurringDeposits = recurringDeposits.filter(r => r.id !== id);
+                saveData();
+                loadRDTable();
+            }
+        }
+
+
+         // ====================== RECURRING DEPOSITS ======================
+
+        // ====================== EQUITY HOLDINGS ======================
+        function renderEquityHoldings() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddEquityForm()">+ Add New Equity Holding</button>
+                
+                <div class="form-container" id="equityForm">
+                    <h3 id="equityFormTitle">Add New Equity Holding</h3>
+                    <div class="form-group">
+                        <label>Company Name</label>
+                        <input type="text" id="companyName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Number of Shares</label>
+                        <input type="number" id="shares" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Price per Share (₹)</label>
+                        <input type="number" id="buyPrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Date</label>
+                        <input type="date" id="buyDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Current Price per Share (₹)</label>
+                        <input type="number" id="currentPrice" step="0.01" required>
+                    </div>
+                    <button class="btn btn-add" onclick="saveEquity()">Save Equity</button>
+                    <button class="btn" onclick="hideEquityForm()">Cancel</button>
+                </div>
+
+                <h3>All Equity Holdings</h3>
+                <table id="equityTable">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Shares</th>
+                            <th>Buy Price</th>
+                            <th>Buy Date</th>
+                            <th>Current Price</th>
+                            <th>Investment Value</th>
+                            <th>Current Value</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadEquityTable();
+        }
+
+        function showAddEquityForm(editId = null) {
+            document.getElementById('equityForm').style.display = 'block';
+            document.getElementById('equityFormTitle').textContent = editId ? 'Edit Equity Holding' : 'Add New Equity Holding';
+            
+            if (editId) {
+                const eq = equityHoldings.find(e => e.id === editId);
+                if (eq) {
+                    document.getElementById('companyName').value = eq.company;
+                    document.getElementById('shares').value = eq.shares;
+                    document.getElementById('buyPrice').value = eq.buyPrice;
+                    document.getElementById('buyDate').value = eq.buyDate || '';
+                    document.getElementById('currentPrice').value = eq.currentPrice;
+                    window.currentEditEquityId = editId;
+                }
+            } else {
+                document.getElementById('companyName').value = '';
+                document.getElementById('shares').value = '';
+                document.getElementById('buyPrice').value = '';
+                document.getElementById('buyDate').value = '';
+                document.getElementById('currentPrice').value = '';
+                window.currentEditEquityId = null;
+            }
+        }
+
+        function hideEquityForm() {
+            document.getElementById('equityForm').style.display = 'none';
+        }
+
+        function saveEquity() {
+            const company = document.getElementById('companyName').value.trim();
+            const shares = parseInt(document.getElementById('shares').value);
+            const buyPrice = parseFloat(document.getElementById('buyPrice').value);
+            const buyDate = document.getElementById('buyDate').value;
+            const currentPrice = parseFloat(document.getElementById('currentPrice').value);
+
+            if (!company || isNaN(shares) || isNaN(buyPrice) || isNaN(currentPrice)) {
+                alert("Please fill all required fields correctly.");
+                return;
+            }
+
+            if (window.currentEditEquityId) {
+                const eq = equityHoldings.find(e => e.id === window.currentEditEquityId);
+                if (eq) {
+                    eq.company = company;
+                    eq.shares = shares;
+                    eq.buyPrice = buyPrice;
+                    eq.buyDate = buyDate;
+                    eq.currentPrice = currentPrice;
+                }
+            } else {
+                equityHoldings.push({
+                    id: Date.now(),
+                    company, shares, buyPrice, buyDate, currentPrice
+                });
+            }
+
+            saveData();
+            hideEquityForm();
+            loadEquityTable();
+        }
+
+        function loadEquityTable() {
+            const tbody = document.querySelector('#equityTable tbody');
+            tbody.innerHTML = '';
+
+            if (equityHoldings.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No equity holdings added yet.</td></tr>`;
+                return;
+            }
+
+            let totalInvestment = 0;
+            let totalCurrentValue = 0;
+
+            equityHoldings.forEach(eq => {
+                const investmentValue = eq.shares * eq.buyPrice;
+                const currentValue = eq.shares * eq.currentPrice;
+                totalInvestment += investmentValue;
+                totalCurrentValue += currentValue;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${eq.company}</td>
+                    <td>${eq.shares}</td>
+                    <td>₹${eq.buyPrice.toLocaleString('en-IN')}</td>
+                    <td>${eq.buyDate || '-'}</td>
+                    <td>₹${eq.currentPrice.toLocaleString('en-IN')}</td>
+                    <td>₹${investmentValue.toLocaleString('en-IN')}</td>
+                    <td class="value-green">₹${currentValue.toLocaleString('en-IN')}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddEquityForm(${eq.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteEquity(${eq.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="5"><strong>Total Portfolio</strong></td>
+                <td><strong>₹${totalInvestment.toLocaleString('en-IN')}</strong></td>
+                <td class="value-green"><strong>₹${totalCurrentValue.toLocaleString('en-IN')}</strong></td>
+                <td></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteEquity(id) {
+            if (confirm("Delete this Equity Holding?")) {
+                equityHoldings = equityHoldings.filter(e => e.id !== id);
+                saveData();
+                loadEquityTable();
+            }
+        }
+            // ====================== EQUITY HOLDINGS ======================
+
+            // ====================== MUTUAL FUNDS ======================
+        function renderMutualFunds() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddMFForm()">+ Add New Mutual Fund</button>
+                
+                <div class="form-container" id="mfForm">
+                    <h3 id="mfFormTitle">Add New Mutual Fund</h3>
+                    <div class="form-group">
+                        <label>Scheme Name</label>
+                        <input type="text" id="mfScheme" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Folio Number</label>
+                        <input type="text" id="mfFolio" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Units</label>
+                        <input type="number" id="mfUnits" step="0.0001" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Invested Amount (₹)</label>
+                        <input type="number" id="mfInvested" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Value (₹)</label>
+                        <input type="number" id="mfCurrentValue" step="0.01" required>
+                    </div>
+                    <button class="btn btn-add" onclick="saveMF()">Save Mutual Fund</button>
+                    <button class="btn" onclick="hideMFForm()">Cancel</button>
+                </div>
+
+                <h3>All Mutual Fund Holdings</h3>
+                <table id="mfTable">
+                    <thead>
+                        <tr>
+                            <th>Scheme Name</th>
+                            <th>Folio No</th>
+                            <th>Units</th>
+                            <th>Invested (₹)</th>
+                            <th>Current Value (₹)</th>
+                            <th>Gain/Loss (₹)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadMFTable();
+        }
+
+        function showAddMFForm(editId = null) {
+            document.getElementById('mfForm').style.display = 'block';
+            document.getElementById('mfFormTitle').textContent = editId ? 'Edit Mutual Fund' : 'Add New Mutual Fund';
+            
+            if (editId) {
+                const mf = mutualFunds.find(m => m.id === editId);
+                if (mf) {
+                    document.getElementById('mfScheme').value = mf.scheme;
+                    document.getElementById('mfFolio').value = mf.folio;
+                    document.getElementById('mfUnits').value = mf.units;
+                    document.getElementById('mfInvested').value = mf.invested;
+                    document.getElementById('mfCurrentValue').value = mf.currentValue;
+                    window.currentEditMFId = editId;
+                }
+            } else {
+                document.getElementById('mfScheme').value = '';
+                document.getElementById('mfFolio').value = '';
+                document.getElementById('mfUnits').value = '';
+                document.getElementById('mfInvested').value = '';
+                document.getElementById('mfCurrentValue').value = '';
+                window.currentEditMFId = null;
+            }
+        }
+
+        function hideMFForm() {
+            document.getElementById('mfForm').style.display = 'none';
+        }
+
+        function saveMF() {
+            const scheme = document.getElementById('mfScheme').value.trim();
+            const folio = document.getElementById('mfFolio').value.trim();
+            const units = parseFloat(document.getElementById('mfUnits').value);
+            const invested = parseFloat(document.getElementById('mfInvested').value);
+            const currentValue = parseFloat(document.getElementById('mfCurrentValue').value);
+
+            if (!scheme || !folio || isNaN(units) || isNaN(invested) || isNaN(currentValue)) {
+                alert("Please fill all required fields correctly.");
+                return;
+            }
+
+            if (window.currentEditMFId) {
+                const mf = mutualFunds.find(m => m.id === window.currentEditMFId);
+                if (mf) {
+                    mf.scheme = scheme;
+                    mf.folio = folio;
+                    mf.units = units;
+                    mf.invested = invested;
+                    mf.currentValue = currentValue;
+                }
+            } else {
+                mutualFunds.push({
+                    id: Date.now(),
+                    scheme, folio, units, invested, currentValue
+                });
+            }
+
+            saveData();
+            hideMFForm();
+            loadMFTable();
+        }
+
+        function loadMFTable() {
+            const tbody = document.querySelector('#mfTable tbody');
+            tbody.innerHTML = '';
+
+            if (mutualFunds.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No Mutual Funds added yet.</td></tr>`;
+                return;
+            }
+
+            let totalInvested = 0;
+            let totalCurrent = 0;
+
+            mutualFunds.forEach(mf => {
+                const gainLoss = mf.currentValue - mf.invested;
+                totalInvested += mf.invested;
+                totalCurrent += mf.currentValue;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${mf.scheme}</td>
+                    <td>${mf.folio}</td>
+                    <td>${mf.units.toFixed(4)}</td>
+                    <td>₹${mf.invested.toLocaleString('en-IN')}</td>
+                    <td class="value-green">₹${mf.currentValue.toLocaleString('en-IN')}</td>
+                    <td style="color: ${gainLoss >= 0 ? 'green' : 'red'}; font-weight:bold;">
+                        ₹${gainLoss.toLocaleString('en-IN')}
+                    </td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddMFForm(${mf.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteMF(${mf.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="3"><strong>Total Portfolio</strong></td>
+                <td><strong>₹${totalInvested.toLocaleString('en-IN')}</strong></td>
+                <td class="value-green"><strong>₹${totalCurrent.toLocaleString('en-IN')}</strong></td>
+                <td><strong>₹${(totalCurrent - totalInvested).toLocaleString('en-IN')}</strong></td>
+                <td></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteMF(id) {
+            if (confirm("Delete this Mutual Fund holding?")) {
+                mutualFunds = mutualFunds.filter(m => m.id !== id);
+                saveData();
+                loadMFTable();
+            }
+        }
+
+         // ====================== MUTUAL FUNDS ======================
+
+         // ====================== ETFs ======================
+        function renderETFs() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddETFForm()">+ Add New ETF</button>
+                
+                <div class="form-container" id="etfForm">
+                    <h3 id="etfFormTitle">Add New ETF Holding</h3>
+                    <div class="form-group">
+                        <label>ETF Name</label>
+                        <input type="text" id="etfName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Units</label>
+                        <input type="number" id="etfUnits" step="0.0001" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Price per Unit (₹)</label>
+                        <input type="number" id="etfBuyPrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Date</label>
+                        <input type="date" id="etfBuyDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Current Price per Unit (₹)</label>
+                        <input type="number" id="etfCurrentPrice" step="0.01" required>
+                    </div>
+                    <button class="btn btn-add" onclick="saveETF()">Save ETF</button>
+                    <button class="btn" onclick="hideETFForm()">Cancel</button>
+                </div>
+
+                <h3>All ETF Holdings</h3>
+                <table id="etfTable">
+                    <thead>
+                        <tr>
+                            <th>ETF Name</th>
+                            <th>Units</th>
+                            <th>Buy Price</th>
+                            <th>Buy Date</th>
+                            <th>Current Price</th>
+                            <th>Investment Value (₹)</th>
+                            <th>Current Value (₹)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadETFTable();
+        }
+
+        function showAddETFForm(editId = null) {
+            document.getElementById('etfForm').style.display = 'block';
+            document.getElementById('etfFormTitle').textContent = editId ? 'Edit ETF' : 'Add New ETF';
+            
+            if (editId) {
+                const etf = etfs.find(e => e.id === editId);
+                if (etf) {
+                    document.getElementById('etfName').value = etf.name;
+                    document.getElementById('etfUnits').value = etf.units;
+                    document.getElementById('etfBuyPrice').value = etf.buyPrice;
+                    document.getElementById('etfBuyDate').value = etf.buyDate || '';
+                    document.getElementById('etfCurrentPrice').value = etf.currentPrice;
+                    window.currentEditETFId = editId;
+                }
+            } else {
+                document.getElementById('etfName').value = '';
+                document.getElementById('etfUnits').value = '';
+                document.getElementById('etfBuyPrice').value = '';
+                document.getElementById('etfBuyDate').value = '';
+                document.getElementById('etfCurrentPrice').value = '';
+                window.currentEditETFId = null;
+            }
+        }
+
+        function hideETFForm() {
+            document.getElementById('etfForm').style.display = 'none';
+        }
+
+        function saveETF() {
+            const name = document.getElementById('etfName').value.trim();
+            const units = parseFloat(document.getElementById('etfUnits').value);
+            const buyPrice = parseFloat(document.getElementById('etfBuyPrice').value);
+            const buyDate = document.getElementById('etfBuyDate').value;
+            const currentPrice = parseFloat(document.getElementById('etfCurrentPrice').value);
+
+            if (!name || isNaN(units) || isNaN(buyPrice) || isNaN(currentPrice)) {
+                alert("Please fill all required fields correctly.");
+                return;
+            }
+
+            if (window.currentEditETFId) {
+                const etf = etfs.find(e => e.id === window.currentEditETFId);
+                if (etf) {
+                    etf.name = name;
+                    etf.units = units;
+                    etf.buyPrice = buyPrice;
+                    etf.buyDate = buyDate;
+                    etf.currentPrice = currentPrice;
+                }
+            } else {
+                etfs.push({
+                    id: Date.now(),
+                    name, units, buyPrice, buyDate, currentPrice
+                });
+            }
+
+            saveData();
+            hideETFForm();
+            loadETFTable();
+        }
+
+        function loadETFTable() {
+            const tbody = document.querySelector('#etfTable tbody');
+            tbody.innerHTML = '';
+
+            if (etfs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No ETFs added yet.</td></tr>`;
+                return;
+            }
+
+            let totalInvestment = 0;
+            let totalCurrent = 0;
+
+            etfs.forEach(etf => {
+                const investmentValue = etf.units * etf.buyPrice;
+                const currentValue = etf.units * etf.currentPrice;
+                totalInvestment += investmentValue;
+                totalCurrent += currentValue;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${etf.name}</td>
+                    <td>${etf.units.toFixed(4)}</td>
+                    <td>₹${etf.buyPrice.toLocaleString('en-IN')}</td>
+                    <td>${etf.buyDate || '-'}</td>
+                    <td>₹${etf.currentPrice.toLocaleString('en-IN')}</td>
+                    <td>₹${investmentValue.toLocaleString('en-IN')}</td>
+                    <td class="value-green">₹${currentValue.toLocaleString('en-IN')}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddETFForm(${etf.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteETF(${etf.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="5"><strong>Total ETF Portfolio</strong></td>
+                <td><strong>₹${totalInvestment.toLocaleString('en-IN')}</strong></td>
+                <td class="value-green"><strong>₹${totalCurrent.toLocaleString('en-IN')}</strong></td>
+                <td></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteETF(id) {
+            if (confirm("Delete this ETF holding?")) {
+                etfs = etfs.filter(e => e.id !== id);
+                saveData();
+                loadETFTable();
+            }
+        }
+        // ====================== ETFs ======================
+
+        // ====================== BULLION & GOLD/SILVER ======================
+        function renderBullion() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddBullionForm()">+ Add New Bullion / Gold / Silver</button>
+                
+                <div class="form-container" id="bullionForm">
+                    <h3 id="bullionFormTitle">Add New Bullion Holding</h3>
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="bullionType" required>
+                            <option value="">Select Type</option>
+                            <option value="Gold">Gold</option>
+                            <option value="Silver">Silver</option>
+                            <option value="Gold ETF">Gold ETF</option>
+                            <option value="Silver ETF">Silver ETF</option>
+                            <option value="Physical Ornaments">Physical Ornaments</option>
+                            <option value="Bullion">Bullion</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input type="text" id="bullionDesc" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Weight (grams)</label>
+                        <input type="number" id="bullionWeight" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Price (₹)</label>
+                        <input type="number" id="bullionBuyPrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Date</label>
+                        <input type="date" id="bullionBuyDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Current Value (₹)</label>
+                        <input type="number" id="bullionCurrentValue" step="0.01" required>
+                    </div>
+                    <button class="btn btn-add" onclick="saveBullion()">Save Bullion</button>
+                    <button class="btn" onclick="hideBullionForm()">Cancel</button>
+                </div>
+
+                <h3>All Bullion & Gold/Silver Holdings</h3>
+                <table id="bullionTable">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Weight (g)</th>
+                            <th>Buy Price (₹)</th>
+                            <th>Buy Date</th>
+                            <th>Current Value (₹)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadBullionTable();
+        }
+
+        function showAddBullionForm(editId = null) {
+            document.getElementById('bullionForm').style.display = 'block';
+            document.getElementById('bullionFormTitle').textContent = editId ? 'Edit Bullion' : 'Add New Bullion';
+            
+            if (editId) {
+                const item = bullion.find(b => b.id === editId);
+                if (item) {
+                    document.getElementById('bullionType').value = item.type;
+                    document.getElementById('bullionDesc').value = item.description;
+                    document.getElementById('bullionWeight').value = item.weight;
+                    document.getElementById('bullionBuyPrice').value = item.buyPrice;
+                    document.getElementById('bullionBuyDate').value = item.buyDate || '';
+                    document.getElementById('bullionCurrentValue').value = item.currentValue;
+                    window.currentEditBullionId = editId;
+                }
+            } else {
+                document.getElementById('bullionType').value = '';
+                document.getElementById('bullionDesc').value = '';
+                document.getElementById('bullionWeight').value = '';
+                document.getElementById('bullionBuyPrice').value = '';
+                document.getElementById('bullionBuyDate').value = '';
+                document.getElementById('bullionCurrentValue').value = '';
+                window.currentEditBullionId = null;
+            }
+        }
+
+        function hideBullionForm() {
+            document.getElementById('bullionForm').style.display = 'none';
+        }
+
+        function saveBullion() {
+            const type = document.getElementById('bullionType').value;
+            const description = document.getElementById('bullionDesc').value.trim();
+            const weight = parseFloat(document.getElementById('bullionWeight').value);
+            const buyPrice = parseFloat(document.getElementById('bullionBuyPrice').value);
+            const buyDate = document.getElementById('bullionBuyDate').value;
+            const currentValue = parseFloat(document.getElementById('bullionCurrentValue').value);
+
+            if (!type || !description || isNaN(weight) || isNaN(buyPrice) || isNaN(currentValue)) {
+                alert("Please fill all required fields correctly.");
+                return;
+            }
+
+            if (window.currentEditBullionId) {
+                const item = bullion.find(b => b.id === window.currentEditBullionId);
+                if (item) {
+                    item.type = type;
+                    item.description = description;
+                    item.weight = weight;
+                    item.buyPrice = buyPrice;
+                    item.buyDate = buyDate;
+                    item.currentValue = currentValue;
+                }
+            } else {
+                bullion.push({
+                    id: Date.now(),
+                    type, description, weight, buyPrice, buyDate, currentValue
+                });
+            }
+
+            saveData();
+            hideBullionForm();
+            loadBullionTable();
+        }
+
+        function loadBullionTable() {
+            const tbody = document.querySelector('#bullionTable tbody');
+            tbody.innerHTML = '';
+
+            if (bullion.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No Bullion / Gold / Silver holdings added yet.</td></tr>`;
+                return;
+            }
+
+            let totalCurrent = 0;
+
+            bullion.forEach(item => {
+                totalCurrent += item.currentValue || 0;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.type}</td>
+                    <td>${item.description}</td>
+                    <td>${item.weight} g</td>
+                    <td>₹${item.buyPrice.toLocaleString('en-IN')}</td>
+                    <td>${item.buyDate || '-'}</td>
+                    <td class="value-green">₹${item.currentValue.toLocaleString('en-IN')}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddBullionForm(${item.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteBullion(${item.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="5"><strong>Total Bullion Value</strong></td>
+                <td class="value-green"><strong>₹${totalCurrent.toLocaleString('en-IN')}</strong></td>
+                <td></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteBullion(id) {
+            if (confirm("Delete this Bullion holding?")) {
+                bullion = bullion.filter(b => b.id !== id);
+                saveData();
+                loadBullionTable();
+            }
+        }
+           
+         // ====================== BULLION & GOLD/SILVER ======================
+
+         // ====================== REAL ESTATE ======================
+        function renderRealEstate() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddRealEstateForm()">+ Add New Real Estate Property</button>
+                
+                <div class="form-container" id="realEstateForm">
+                    <h3 id="realEstateFormTitle">Add New Real Estate</h3>
+                    <div class="form-group">
+                        <label>Property Type</label>
+                        <select id="reType" required>
+                            <option value="">Select Type</option>
+                            <option value="House">House</option>
+                            <option value="Farmland">Farmland</option>
+                            <option value="Apartment">Apartment</option>
+                            <option value="Commercial">Commercial</option>
+                            <option value="Plot">Plot</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" id="reLocation" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Purchase Price (₹)</label>
+                        <input type="number" id="rePurchasePrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Purchase Date</label>
+                        <input type="date" id="rePurchaseDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Current Value (₹)</label>
+                        <input type="number" id="reCurrentValue" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="reNotes" placeholder="Any additional details..."></textarea>
+                    </div>
+                    <button class="btn btn-add" onclick="saveRealEstate()">Save Property</button>
+                    <button class="btn" onclick="hideRealEstateForm()">Cancel</button>
+                </div>
+
+                <h3>All Real Estate Holdings</h3>
+                <table id="realEstateTable">
+                    <thead>
+                        <tr>
+                            <th>Property Type</th>
+                            <th>Location</th>
+                            <th>Purchase Price (₹)</th>
+                            <th>Purchase Date</th>
+                            <th>Current Value (₹)</th>
+                            <th>Gain/Loss (₹)</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadRealEstateTable();
+        }
+
+        function showAddRealEstateForm(editId = null) {
+            document.getElementById('realEstateForm').style.display = 'block';
+            document.getElementById('realEstateFormTitle').textContent = editId ? 'Edit Real Estate' : 'Add New Real Estate';
+            
+            if (editId) {
+                const re = realEstate.find(r => r.id === editId);
+                if (re) {
+                    document.getElementById('reType').value = re.type;
+                    document.getElementById('reLocation').value = re.location;
+                    document.getElementById('rePurchasePrice').value = re.purchasePrice;
+                    document.getElementById('rePurchaseDate').value = re.purchaseDate || '';
+                    document.getElementById('reCurrentValue').value = re.currentValue;
+                    document.getElementById('reNotes').value = re.notes || '';
+                    window.currentEditREId = editId;
+                }
+            } else {
+                document.getElementById('reType').value = '';
+                document.getElementById('reLocation').value = '';
+                document.getElementById('rePurchasePrice').value = '';
+                document.getElementById('rePurchaseDate').value = '';
+                document.getElementById('reCurrentValue').value = '';
+                document.getElementById('reNotes').value = '';
+                window.currentEditREId = null;
+            }
+        }
+
+        function hideRealEstateForm() {
+            document.getElementById('realEstateForm').style.display = 'none';
+        }
+
+        function saveRealEstate() {
+            const type = document.getElementById('reType').value;
+            const location = document.getElementById('reLocation').value.trim();
+            const purchasePrice = parseFloat(document.getElementById('rePurchasePrice').value);
+            const purchaseDate = document.getElementById('rePurchaseDate').value;
+            const currentValue = parseFloat(document.getElementById('reCurrentValue').value);
+            const notes = document.getElementById('reNotes').value.trim();
+
+            if (!type || !location || isNaN(purchasePrice) || isNaN(currentValue)) {
+                alert("Please fill all required fields correctly.");
+                return;
+            }
+
+            if (window.currentEditREId) {
+                const re = realEstate.find(r => r.id === window.currentEditREId);
+                if (re) {
+                    re.type = type;
+                    re.location = location;
+                    re.purchasePrice = purchasePrice;
+                    re.purchaseDate = purchaseDate;
+                    re.currentValue = currentValue;
+                    re.notes = notes;
+                }
+            } else {
+                realEstate.push({
+                    id: Date.now(),
+                    type, location, purchasePrice, purchaseDate, currentValue, notes
+                });
+            }
+
+            saveData();
+            hideRealEstateForm();
+            loadRealEstateTable();
+        }
+
+        function loadRealEstateTable() {
+            const tbody = document.querySelector('#realEstateTable tbody');
+            tbody.innerHTML = '';
+
+            if (realEstate.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No Real Estate properties added yet.</td></tr>`;
+                return;
+            }
+
+            let totalPurchase = 0;
+            let totalCurrent = 0;
+
+            realEstate.forEach(re => {
+                const gainLoss = re.currentValue - re.purchasePrice;
+                totalPurchase += re.purchasePrice;
+                totalCurrent += re.currentValue;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${re.type}</td>
+                    <td>${re.location}</td>
+                    <td>₹${re.purchasePrice.toLocaleString('en-IN')}</td>
+                    <td>${re.purchaseDate || '-'}</td>
+                    <td class="value-green">₹${re.currentValue.toLocaleString('en-IN')}</td>
+                    <td style="color: ${gainLoss >= 0 ? 'green' : 'red'}; font-weight:bold;">
+                        ₹${gainLoss.toLocaleString('en-IN')}
+                    </td>
+                    <td>${re.notes || '-'}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddRealEstateForm(${re.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteRealEstate(${re.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="2"><strong>Total Real Estate</strong></td>
+                <td><strong>₹${totalPurchase.toLocaleString('en-IN')}</strong></td>
+                <td></td>
+                <td class="value-green"><strong>₹${totalCurrent.toLocaleString('en-IN')}</strong></td>
+                <td><strong>₹${(totalCurrent - totalPurchase).toLocaleString('en-IN')}</strong></td>
+                <td colspan="2"></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteRealEstate(id) {
+            if (confirm("Delete this Real Estate property?")) {
+                realEstate = realEstate.filter(r => r.id !== id);
+                saveData();
+                loadRealEstateTable();
+            }
+        }
+        // ====================== REAL ESTATE ======================
+        
+        // ====================== INSURANCE ======================
+        function renderInsurance() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddInsuranceForm()">+ Add New Insurance Policy</button>
+                <p><strong>Note:</strong> Policies renewing in next 60 days are highlighted.</p>
+                
+                <div class="form-container" id="insuranceForm">
+                    <h3 id="insuranceFormTitle">Add New Insurance</h3>
+                    <div class="form-group">
+                        <label>Insurance Type</label>
+                        <select id="insType" required>
+                            <option value="">Select Type</option>
+                            <option value="Term Life">Term Life Insurance</option>
+                            <option value="Whole Life">Whole Life Insurance</option>
+                            <option value="Health">Health Insurance</option>
+                            <option value="Family Floater">Family Floater Health</option>
+                            <option value="Top-up Health">Top-up Health</option>
+                            <option value="Critical Illness">Critical Illness</option>
+                            <option value="Accident">Personal Accident</option>
+                            <option value="Vehicle">Vehicle Insurance</option>
+                            <option value="Home">Home Insurance</option>
+                            <option value="Travel">Travel Insurance</option>
+                            <option value="PMJJBY">PMJJBY</option>
+                            <option value="PMSBY">PMSBY</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Provider / Company</label>
+                        <input type="text" id="insProvider" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Policy Number</label>
+                        <input type="text" id="insPolicyNo" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Sum Assured (₹)</label>
+                        <input type="number" id="insSumAssured" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Annual Premium (₹)</label>
+                        <input type="number" id="insPremium" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Renewal Date</label>
+                        <input type="date" id="insRenewalDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="insStatus">
+                            <option value="Active">Active</option>
+                            <option value="Expired">Expired</option>
+                            <option value="Claimed">Claimed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="insNotes" placeholder="Beneficiaries, special conditions, etc."></textarea>
+                    </div>
+                    <button class="btn btn-add" onclick="saveInsurance()">Save Policy</button>
+                    <button class="btn" onclick="hideInsuranceForm()">Cancel</button>
+                </div>
+
+                <h3>All Insurance Policies</h3>
+                <table id="insuranceTable">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Provider</th>
+                            <th>Policy No</th>
+                            <th>Sum Assured (₹)</th>
+                            <th>Premium (₹)</th>
+                            <th>Renewal Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadInsuranceTable();
+        }
+
+        function showAddInsuranceForm(editId = null) {
+            document.getElementById('insuranceForm').style.display = 'block';
+            document.getElementById('insuranceFormTitle').textContent = editId ? 'Edit Insurance Policy' : 'Add New Insurance Policy';
+            
+            if (editId) {
+                const pol = insurance.find(p => p.id === editId);
+                if (pol) {
+                    document.getElementById('insType').value = pol.type;
+                    document.getElementById('insProvider').value = pol.provider;
+                    document.getElementById('insPolicyNo').value = pol.policyNo;
+                    document.getElementById('insSumAssured').value = pol.sumAssured || '';
+                    document.getElementById('insPremium').value = pol.premium;
+                    document.getElementById('insRenewalDate').value = pol.renewalDate;
+                    document.getElementById('insStatus').value = pol.status;
+                    document.getElementById('insNotes').value = pol.notes || '';
+                    window.currentEditInsId = editId;
+                }
+            } else {
+                document.getElementById('insType').value = '';
+                document.getElementById('insProvider').value = '';
+                document.getElementById('insPolicyNo').value = '';
+                document.getElementById('insSumAssured').value = '';
+                document.getElementById('insPremium').value = '';
+                document.getElementById('insRenewalDate').value = '';
+                document.getElementById('insStatus').value = 'Active';
+                document.getElementById('insNotes').value = '';
+                window.currentEditInsId = null;
+            }
+        }
+
+        function hideInsuranceForm() {
+            document.getElementById('insuranceForm').style.display = 'none';
+        }
+
+        function saveInsurance() {
+            const type = document.getElementById('insType').value;
+            const provider = document.getElementById('insProvider').value.trim();
+            const policyNo = document.getElementById('insPolicyNo').value.trim();
+            const sumAssured = parseFloat(document.getElementById('insSumAssured').value) || 0;
+            const premium = parseFloat(document.getElementById('insPremium').value);
+            const renewalDate = document.getElementById('insRenewalDate').value;
+            const status = document.getElementById('insStatus').value;
+            const notes = document.getElementById('insNotes').value.trim();
+
+            if (!type || !provider || !policyNo || !renewalDate || isNaN(premium)) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditInsId) {
+                const pol = insurance.find(p => p.id === window.currentEditInsId);
+                if (pol) {
+                    pol.type = type;
+                    pol.provider = provider;
+                    pol.policyNo = policyNo;
+                    pol.sumAssured = sumAssured;
+                    pol.premium = premium;
+                    pol.renewalDate = renewalDate;
+                    pol.status = status;
+                    pol.notes = notes;
+                }
+            } else {
+                insurance.push({
+                    id: Date.now(),
+                    type, provider, policyNo, sumAssured, premium, renewalDate, status, notes
+                });
+            }
+
+            saveData();
+            hideInsuranceForm();
+            loadInsuranceTable();
+        }
+
+        function loadInsuranceTable() {
+            const tbody = document.querySelector('#insuranceTable tbody');
+            tbody.innerHTML = '';
+
+            if (insurance.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No Insurance policies added yet.</td></tr>`;
+                return;
+            }
+
+            const today = new Date();
+            let totalPremium = 0;
+
+            insurance.forEach(pol => {
+                const renewal = new Date(pol.renewalDate);
+                const daysLeft = Math.ceil((renewal - today) / (1000 * 3600 * 24));
+                const isExpiringSoon = daysLeft > 0 && daysLeft <= 60;
+
+                totalPremium += pol.premium || 0;
+
+                const row = document.createElement('tr');
+                if (isExpiringSoon) row.classList.add('expiring-soon');
+
+                row.innerHTML = `
+                    <td>${pol.type}</td>
+                    <td>${pol.provider}</td>
+                    <td>${pol.policyNo}</td>
+                    <td>₹${pol.sumAssured.toLocaleString('en-IN')}</td>
+                    <td>₹${pol.premium.toLocaleString('en-IN')}</td>
+                    <td>${pol.renewalDate} ${isExpiringSoon ? '🔴' : ''}</td>
+                    <td>${pol.status}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddInsuranceForm(${pol.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteInsurance(${pol.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="4"><strong>Total Annual Premium</strong></td>
+                <td><strong>₹${totalPremium.toLocaleString('en-IN')}</strong></td>
+                <td colspan="3"></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteInsurance(id) {
+            if (confirm("Delete this Insurance Policy?")) {
+                insurance = insurance.filter(p => p.id !== id);
+                saveData();
+                loadInsuranceTable();
+            }
+        }
+         // ====================== INSURANCE ======================
+
+         // ====================== CARDS ======================
+        function renderCards() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddCardForm()">+ Add New Card</button>
+                <p><strong>Note:</strong> Cards expiring in next 60 days are highlighted in yellow.</p>
+                
+                <div class="form-container" id="cardForm">
+                    <h3 id="cardFormTitle">Add New Card</h3>
+                    <div class="form-group">
+                        <label>Card Type</label>
+                        <select id="cardType" required>
+                            <option value="">Select Type</option>
+                            <option value="Credit Card">Credit Card</option>
+                            <option value="Debit Card">Debit Card</option>
+                            <option value="ATM Card">ATM Card</option>
+                            <option value="Rupay Card">Rupay Card</option>
+                            <option value="International Card">International Card</option>
+                            <option value="Corporate Card">Corporate Card</option>
+                            <option value="Fuel Card">Fuel Card</option>
+                            <option value="Shopping Card">Shopping Card</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Bank / Issuer</label>
+                        <input type="text" id="cardBank" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Card Number (Last 4 digits recommended)</label>
+                        <input type="text" id="cardNumber" maxlength="20" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Expiry Date</label>
+                        <input type="date" id="cardExpiry" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Credit Limit (₹) - For Credit Cards</label>
+                        <input type="number" id="cardLimit" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="cardStatus">
+                            <option value="Active">Active</option>
+                            <option value="Expired">Expired</option>
+                            <option value="Blocked">Blocked</option>
+                            <option value="Lost">Lost</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="cardNotes" placeholder="Cardholder name, rewards info, etc."></textarea>
+                    </div>
+                    <button class="btn btn-add" onclick="saveCard()">Save Card</button>
+                    <button class="btn" onclick="hideCardForm()">Cancel</button>
+                </div>
+
+                <h3>All Cards</h3>
+                <table id="cardsTable">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Bank</th>
+                            <th>Card Number</th>
+                            <th>Expiry Date</th>
+                            <th>Limit (₹)</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadCardsTable();
+        }
+
+        function showAddCardForm(editId = null) {
+            document.getElementById('cardForm').style.display = 'block';
+            document.getElementById('cardFormTitle').textContent = editId ? 'Edit Card' : 'Add New Card';
+            
+            if (editId) {
+                const card = cards.find(c => c.id === editId);
+                if (card) {
+                    document.getElementById('cardType').value = card.type;
+                    document.getElementById('cardBank').value = card.bank;
+                    document.getElementById('cardNumber').value = card.number;
+                    document.getElementById('cardExpiry').value = card.expiry;
+                    document.getElementById('cardLimit').value = card.limit || '';
+                    document.getElementById('cardStatus').value = card.status;
+                    document.getElementById('cardNotes').value = card.notes || '';
+                    window.currentEditCardId = editId;
+                }
+            } else {
+                document.getElementById('cardType').value = '';
+                document.getElementById('cardBank').value = '';
+                document.getElementById('cardNumber').value = '';
+                document.getElementById('cardExpiry').value = '';
+                document.getElementById('cardLimit').value = '';
+                document.getElementById('cardStatus').value = 'Active';
+                document.getElementById('cardNotes').value = '';
+                window.currentEditCardId = null;
+            }
+        }
+
+        function hideCardForm() {
+            document.getElementById('cardForm').style.display = 'none';
+        }
+
+        function saveCard() {
+            const type = document.getElementById('cardType').value;
+            const bank = document.getElementById('cardBank').value.trim();
+            const number = document.getElementById('cardNumber').value.trim();
+            const expiry = document.getElementById('cardExpiry').value;
+            const limit = parseFloat(document.getElementById('cardLimit').value) || 0;
+            const status = document.getElementById('cardStatus').value;
+            const notes = document.getElementById('cardNotes').value.trim();
+
+            if (!type || !bank || !number || !expiry) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditCardId) {
+                const card = cards.find(c => c.id === window.currentEditCardId);
+                if (card) {
+                    card.type = type;
+                    card.bank = bank;
+                    card.number = number;
+                    card.expiry = expiry;
+                    card.limit = limit;
+                    card.status = status;
+                    card.notes = notes;
+                }
+            } else {
+                cards.push({
+                    id: Date.now(),
+                    type, bank, number, expiry, limit, status, notes
+                });
+            }
+
+            saveData();
+            hideCardForm();
+            loadCardsTable();
+        }
+
+        function loadCardsTable() {
+            const tbody = document.querySelector('#cardsTable tbody');
+            tbody.innerHTML = '';
+
+            if (cards.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No cards added yet.</td></tr>`;
+                return;
+            }
+
+            const today = new Date();
+            let activeCount = 0;
+
+            cards.forEach(card => {
+                const expiryDate = new Date(card.expiry);
+                const daysLeft = Math.ceil((expiryDate - today) / (1000 * 3600 * 24));
+                const isExpiringSoon = daysLeft > 0 && daysLeft <= 60;
+
+                if (card.status === 'Active') activeCount++;
+
+                const row = document.createElement('tr');
+                if (isExpiringSoon) row.classList.add('expiring-soon');
+
+                row.innerHTML = `
+                    <td>${card.type}</td>
+                    <td>${card.bank}</td>
+                    <td>${card.number}</td>
+                    <td>${card.expiry} ${isExpiringSoon ? '🔴' : ''}</td>
+                    <td>${card.limit ? '₹' + card.limit.toLocaleString('en-IN') : '-'}</td>
+                    <td>${card.status}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddCardForm(${card.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteCard(${card.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function deleteCard(id) {
+            if (confirm("Delete this card?")) {
+                cards = cards.filter(c => c.id !== id);
+                saveData();
+                loadCardsTable();
+            }
+        }
+        // ====================== CARDS ======================
+
+        // ====================== NPS ACCOUNTS ======================
+        function renderNPS() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddNPSForm()">+ Add New NPS Account</button>
+                
+                <div class="form-container" id="npsForm">
+                    <h3 id="npsFormTitle">Add New NPS Account</h3>
+                    <div class="form-group">
+                        <label>Member Name</label>
+                        <select id="npsMember" required>
+                            <option value="">Select Member</option>
+                            <option value="You">You</option>
+                            <option value="Wife">Wife</option>
+                            <option value="Kid 1">Kid 1 (Vatsalya)</option>
+                            <option value="Kid 2">Kid 2 (Vatsalya)</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tier</label>
+                        <select id="npsTier" required>
+                            <option value="Tier 1">Tier 1</option>
+                            <option value="Tier 2">Tier 2</option>
+                            <option value="Vatsalya">Vatsalya (For Kids)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>PRAN Number</label>
+                        <input type="text" id="npsPRAN" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Corpus (₹)</label>
+                        <input type="number" id="npsCorpus" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Last Contribution Date</label>
+                        <input type="date" id="npsContributionDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="npsNotes" placeholder="Asset allocation, nominee, etc."></textarea>
+                    </div>
+                    <button class="btn btn-add" onclick="saveNPS()">Save NPS Account</button>
+                    <button class="btn" onclick="hideNPSForm()">Cancel</button>
+                </div>
+
+                <h3>All NPS Accounts</h3>
+                <table id="npsTable">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Tier</th>
+                            <th>PRAN</th>
+                            <th>Corpus (₹)</th>
+                            <th>Last Contribution</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadNPSTable();
+        }
+
+        function showAddNPSForm(editId = null) {
+            document.getElementById('npsForm').style.display = 'block';
+            document.getElementById('npsFormTitle').textContent = editId ? 'Edit NPS Account' : 'Add New NPS Account';
+            
+            if (editId) {
+                const acc = npsAccounts.find(n => n.id === editId);
+                if (acc) {
+                    document.getElementById('npsMember').value = acc.member;
+                    document.getElementById('npsTier').value = acc.tier;
+                    document.getElementById('npsPRAN').value = acc.pran;
+                    document.getElementById('npsCorpus').value = acc.corpus;
+                    document.getElementById('npsContributionDate').value = acc.contributionDate || '';
+                    document.getElementById('npsNotes').value = acc.notes || '';
+                    window.currentEditNPSId = editId;
+                }
+            } else {
+                document.getElementById('npsMember').value = '';
+                document.getElementById('npsTier').value = 'Tier 1';
+                document.getElementById('npsPRAN').value = '';
+                document.getElementById('npsCorpus').value = '';
+                document.getElementById('npsContributionDate').value = '';
+                document.getElementById('npsNotes').value = '';
+                window.currentEditNPSId = null;
+            }
+        }
+
+        function hideNPSForm() {
+            document.getElementById('npsForm').style.display = 'none';
+        }
+
+        function saveNPS() {
+            const member = document.getElementById('npsMember').value;
+            const tier = document.getElementById('npsTier').value;
+            const pran = document.getElementById('npsPRAN').value.trim();
+            const corpus = parseFloat(document.getElementById('npsCorpus').value);
+            const contributionDate = document.getElementById('npsContributionDate').value;
+            const notes = document.getElementById('npsNotes').value.trim();
+
+            if (!member || !tier || !pran || isNaN(corpus)) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditNPSId) {
+                const acc = npsAccounts.find(n => n.id === window.currentEditNPSId);
+                if (acc) {
+                    acc.member = member;
+                    acc.tier = tier;
+                    acc.pran = pran;
+                    acc.corpus = corpus;
+                    acc.contributionDate = contributionDate;
+                    acc.notes = notes;
+                }
+            } else {
+                npsAccounts.push({
+                    id: Date.now(),
+                    member, tier, pran, corpus, contributionDate, notes
+                });
+            }
+
+            saveData();
+            hideNPSForm();
+            loadNPSTable();
+        }
+
+        function loadNPSTable() {
+            const tbody = document.querySelector('#npsTable tbody');
+            tbody.innerHTML = '';
+
+            if (npsAccounts.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No NPS accounts added yet.</td></tr>`;
+                return;
+            }
+
+            let totalCorpus = 0;
+
+            npsAccounts.forEach(acc => {
+                totalCorpus += acc.corpus || 0;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${acc.member}</td>
+                    <td>${acc.tier}</td>
+                    <td>${acc.pran}</td>
+                    <td class="value-green">₹${acc.corpus.toLocaleString('en-IN')}</td>
+                    <td>${acc.contributionDate || '-'}</td>
+                    <td>${acc.notes || '-'}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddNPSForm(${acc.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteNPS(${acc.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="3"><strong>Total NPS Corpus</strong></td>
+                <td class="value-green"><strong>₹${totalCorpus.toLocaleString('en-IN')}</strong></td>
+                <td colspan="3"></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteNPS(id) {
+            if (confirm("Delete this NPS Account?")) {
+                npsAccounts = npsAccounts.filter(n => n.id !== id);
+                saveData();
+                loadNPSTable();
+            }
+        }
+         // ====================== NPS ACCOUNTS ======================
+
+         // ====================== CASH HOLDINGS ======================
+        function renderCashHoldings() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddCashForm()">+ Add Cash Holding</button>
+                
+                <div class="form-container" id="cashForm">
+                    <h3 id="cashFormTitle">Add Cash Holding</h3>
+                    <div class="form-group">
+                        <label>Location / Place</label>
+                        <input type="text" id="cashLocation" placeholder="Home Safe, Wallet, Bank Locker, etc." required>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount (₹)</label>
+                        <input type="number" id="cashAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="cashDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="cashNotes" placeholder="Currency type, purpose, hidden location, etc."></textarea>
+                    </div>
+                    <button class="btn btn-add" onclick="saveCash()">Save Cash</button>
+                    <button class="btn" onclick="hideCashForm()">Cancel</button>
+                </div>
+
+                <h3>All Cash Holdings</h3>
+                <table id="cashTable">
+                    <thead>
+                        <tr>
+                            <th>Location</th>
+                            <th>Amount (₹)</th>
+                            <th>Date</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadCashTable();
+        }
+
+        function showAddCashForm(editId = null) {
+            document.getElementById('cashForm').style.display = 'block';
+            document.getElementById('cashFormTitle').textContent = editId ? 'Edit Cash Holding' : 'Add Cash Holding';
+            
+            if (editId) {
+                const cash = cashHoldings.find(c => c.id === editId);
+                if (cash) {
+                    document.getElementById('cashLocation').value = cash.location;
+                    document.getElementById('cashAmount').value = cash.amount;
+                    document.getElementById('cashDate').value = cash.date || '';
+                    document.getElementById('cashNotes').value = cash.notes || '';
+                    window.currentEditCashId = editId;
+                }
+            } else {
+                document.getElementById('cashLocation').value = '';
+                document.getElementById('cashAmount').value = '';
+                document.getElementById('cashDate').value = '';
+                document.getElementById('cashNotes').value = '';
+                window.currentEditCashId = null;
+            }
+        }
+
+        function hideCashForm() {
+            document.getElementById('cashForm').style.display = 'none';
+        }
+
+        function saveCash() {
+            const location = document.getElementById('cashLocation').value.trim();
+            const amount = parseFloat(document.getElementById('cashAmount').value);
+            const date = document.getElementById('cashDate').value;
+            const notes = document.getElementById('cashNotes').value.trim();
+
+            if (!location || isNaN(amount)) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditCashId) {
+                const cash = cashHoldings.find(c => c.id === window.currentEditCashId);
+                if (cash) {
+                    cash.location = location;
+                    cash.amount = amount;
+                    cash.date = date;
+                    cash.notes = notes;
+                }
+            } else {
+                cashHoldings.push({
+                    id: Date.now(),
+                    location, amount, date, notes
+                });
+            }
+
+            saveData();
+            hideCashForm();
+            loadCashTable();
+        }
+
+        function loadCashTable() {
+            const tbody = document.querySelector('#cashTable tbody');
+            tbody.innerHTML = '';
+
+            if (cashHoldings.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">No cash holdings added yet.</td></tr>`;
+                return;
+            }
+
+            let totalCash = 0;
+
+            cashHoldings.forEach(cash => {
+                totalCash += cash.amount || 0;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${cash.location}</td>
+                    <td class="value-green">₹${cash.amount.toLocaleString('en-IN')}</td>
+                    <td>${cash.date || '-'}</td>
+                    <td>${cash.notes || '-'}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddCashForm(${cash.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteCash(${cash.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td><strong>Total Cash Holdings</strong></td>
+                <td class="value-green"><strong>₹${totalCash.toLocaleString('en-IN')}</strong></td>
+                <td colspan="3"></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteCash(id) {
+            if (confirm("Delete this Cash Holding?")) {
+                cashHoldings = cashHoldings.filter(c => c.id !== id);
+                saveData();
+                loadCashTable();
+            }
+        }
+        // ====================== CASH HOLDINGS ======================
+
+        // ====================== COLLECTIONS ======================
+        function renderCollections() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddCollectionForm()">+ Add New Item to Collection</button>
+                
+                <div class="form-container" id="collectionForm">
+                    <h3 id="collectionFormTitle">Add New Collection Item</h3>
+                    <div class="form-group">
+                        <label>Item Type</label>
+                        <select id="colType" required>
+                            <option value="">Select Type</option>
+                            <option value="Ancient Indian Coins">Ancient Indian Coins</option>
+                            <option value="British India Coins">British India Coins</option>
+                            <option value="Foreign Coins">Foreign Coins</option>
+                            <option value="Commemorative Coins">Commemorative Coins</option>
+                            <option value="Stamps">Stamps</option>
+                            <option value="Paper Currency">Paper Currency (Notes)</option>
+                            <option value="Other Collectibles">Other Collectibles</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input type="text" id="colDescription" placeholder="e.g., 1890 Queen Victoria Silver Rupee" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" id="colQuantity" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Price (₹)</label>
+                        <input type="number" id="colBuyPrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Buy Date</label>
+                        <input type="date" id="colBuyDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Current Value (₹)</label>
+                        <input type="number" id="colCurrentValue" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="colNotes" placeholder="Condition, rarity, source, etc."></textarea>
+                    </div>
+                    <button class="btn btn-add" onclick="saveCollection()">Save Item</button>
+                    <button class="btn" onclick="hideCollectionForm()">Cancel</button>
+                </div>
+
+                <h3>All Collections</h3>
+                <table id="collectionTable">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Qty</th>
+                            <th>Buy Price (₹)</th>
+                            <th>Buy Date</th>
+                            <th>Current Value (₹)</th>
+                            <th>Gain/Loss</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadCollectionTable();
+        }
+
+        function showAddCollectionForm(editId = null) {
+            document.getElementById('collectionForm').style.display = 'block';
+            document.getElementById('collectionFormTitle').textContent = editId ? 'Edit Collection Item' : 'Add New Collection Item';
+            
+            if (editId) {
+                const item = collections.find(c => c.id === editId);
+                if (item) {
+                    document.getElementById('colType').value = item.type;
+                    document.getElementById('colDescription').value = item.description;
+                    document.getElementById('colQuantity').value = item.quantity;
+                    document.getElementById('colBuyPrice').value = item.buyPrice;
+                    document.getElementById('colBuyDate').value = item.buyDate || '';
+                    document.getElementById('colCurrentValue').value = item.currentValue;
+                    document.getElementById('colNotes').value = item.notes || '';
+                    window.currentEditColId = editId;
+                }
+            } else {
+                document.getElementById('colType').value = '';
+                document.getElementById('colDescription').value = '';
+                document.getElementById('colQuantity').value = '1';
+                document.getElementById('colBuyPrice').value = '';
+                document.getElementById('colBuyDate').value = '';
+                document.getElementById('colCurrentValue').value = '';
+                document.getElementById('colNotes').value = '';
+                window.currentEditColId = null;
+            }
+        }
+
+        function hideCollectionForm() {
+            document.getElementById('collectionForm').style.display = 'none';
+        }
+
+        function saveCollection() {
+            const type = document.getElementById('colType').value;
+            const description = document.getElementById('colDescription').value.trim();
+            const quantity = parseInt(document.getElementById('colQuantity').value) || 1;
+            const buyPrice = parseFloat(document.getElementById('colBuyPrice').value);
+            const buyDate = document.getElementById('colBuyDate').value;
+            const currentValue = parseFloat(document.getElementById('colCurrentValue').value);
+            const notes = document.getElementById('colNotes').value.trim();
+
+            if (!type || !description || isNaN(buyPrice) || isNaN(currentValue)) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditColId) {
+                const item = collections.find(c => c.id === window.currentEditColId);
+                if (item) {
+                    item.type = type;
+                    item.description = description;
+                    item.quantity = quantity;
+                    item.buyPrice = buyPrice;
+                    item.buyDate = buyDate;
+                    item.currentValue = currentValue;
+                    item.notes = notes;
+                }
+            } else {
+                collections.push({
+                    id: Date.now(),
+                    type, description, quantity, buyPrice, buyDate, currentValue, notes
+                });
+            }
+
+            saveData();
+            hideCollectionForm();
+            loadCollectionTable();
+        }
+
+        function loadCollectionTable() {
+            const tbody = document.querySelector('#collectionTable tbody');
+            tbody.innerHTML = '';
+
+            if (collections.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No collection items added yet.</td></tr>`;
+                return;
+            }
+
+            let totalBuy = 0;
+            let totalCurrent = 0;
+
+            collections.forEach(item => {
+                const buyValue = item.buyPrice * item.quantity;
+                const currentTotal = item.currentValue * item.quantity;
+                totalBuy += buyValue;
+                totalCurrent += currentTotal;
+
+                const gainLoss = currentTotal - buyValue;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.type}</td>
+                    <td>${item.description}</td>
+                    <td>${item.quantity}</td>
+                    <td>₹${item.buyPrice.toLocaleString('en-IN')}</td>
+                    <td>${item.buyDate || '-'}</td>
+                    <td class="value-green">₹${item.currentValue.toLocaleString('en-IN')}</td>
+                    <td style="color: ${gainLoss >= 0 ? 'green' : 'red'}; font-weight:bold;">
+                        ₹${gainLoss.toLocaleString('en-IN')}
+                    </td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddCollectionForm(${item.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteCollection(${item.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="5"><strong>Total Collection Value</strong></td>
+                <td class="value-green"><strong>₹${totalCurrent.toLocaleString('en-IN')}</strong></td>
+                <td><strong>₹${(totalCurrent - totalBuy).toLocaleString('en-IN')}</strong></td>
+                <td></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteCollection(id) {
+            if (confirm("Delete this collection item?")) {
+                collections = collections.filter(c => c.id !== id);
+                saveData();
+                loadCollectionTable();
+            }
+        }
+        // ====================== COLLECTIONS ======================
+
+        // ====================== DEBTS ======================
+        function renderDebts() {
+            const content = document.getElementById('content');
+            
+            let html = `
+                <button class="btn btn-add" onclick="showAddDebtForm()">+ Add New Debt / Loan</button>
+                
+                <div class="form-container" id="debtForm">
+                    <h3 id="debtFormTitle">Add New Debt</h3>
+                    <div class="form-group">
+                        <label>Creditor / Lender</label>
+                        <input type="text" id="debtCreditor" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount (₹)</label>
+                        <input type="number" id="debtAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Date</label>
+                        <input type="date" id="debtStartDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Due Date</label>
+                        <input type="date" id="debtDueDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Interest Rate (% p.a.)</label>
+                        <input type="number" id="debtInterest" step="0.01" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="debtStatus">
+                            <option value="Active">Active</option>
+                            <option value="Paid">Paid</option>
+                            <option value="Overdue">Overdue</option>
+                            <option value="Settled">Settled</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="debtNotes" placeholder="Loan purpose, EMI details, collateral, etc."></textarea>
+                    </div>
+                    <button class="btn btn-add" onclick="saveDebt()">Save Debt</button>
+                    <button class="btn" onclick="hideDebtForm()">Cancel</button>
+                </div>
+
+                <h3>All Debts / Loans</h3>
+                <table id="debtTable">
+                    <thead>
+                        <tr>
+                            <th>Creditor</th>
+                            <th>Amount (₹)</th>
+                            <th>Start Date</th>
+                            <th>Due Date</th>
+                            <th>Interest (%)</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            content.innerHTML += html;
+            loadDebtTable();
+        }
+
+        function showAddDebtForm(editId = null) {
+            document.getElementById('debtForm').style.display = 'block';
+            document.getElementById('debtFormTitle').textContent = editId ? 'Edit Debt' : 'Add New Debt';
+            
+            if (editId) {
+                const debt = debts.find(d => d.id === editId);
+                if (debt) {
+                    document.getElementById('debtCreditor').value = debt.creditor;
+                    document.getElementById('debtAmount').value = debt.amount;
+                    document.getElementById('debtStartDate').value = debt.startDate || '';
+                    document.getElementById('debtDueDate').value = debt.dueDate || '';
+                    document.getElementById('debtInterest').value = debt.interestRate;
+                    document.getElementById('debtStatus').value = debt.status;
+                    document.getElementById('debtNotes').value = debt.notes || '';
+                    window.currentEditDebtId = editId;
+                }
+            } else {
+                document.getElementById('debtCreditor').value = '';
+                document.getElementById('debtAmount').value = '';
+                document.getElementById('debtStartDate').value = '';
+                document.getElementById('debtDueDate').value = '';
+                document.getElementById('debtInterest').value = '0';
+                document.getElementById('debtStatus').value = 'Active';
+                document.getElementById('debtNotes').value = '';
+                window.currentEditDebtId = null;
+            }
+        }
+
+        function hideDebtForm() {
+            document.getElementById('debtForm').style.display = 'none';
+        }
+
+        function saveDebt() {
+            const creditor = document.getElementById('debtCreditor').value.trim();
+            const amount = parseFloat(document.getElementById('debtAmount').value);
+            const startDate = document.getElementById('debtStartDate').value;
+            const dueDate = document.getElementById('debtDueDate').value;
+            const interestRate = parseFloat(document.getElementById('debtInterest').value) || 0;
+            const status = document.getElementById('debtStatus').value;
+            const notes = document.getElementById('debtNotes').value.trim();
+
+            if (!creditor || isNaN(amount)) {
+                alert("Please fill all required fields.");
+                return;
+            }
+
+            if (window.currentEditDebtId) {
+                const debt = debts.find(d => d.id === window.currentEditDebtId);
+                if (debt) {
+                    debt.creditor = creditor;
+                    debt.amount = amount;
+                    debt.startDate = startDate;
+                    debt.dueDate = dueDate;
+                    debt.interestRate = interestRate;
+                    debt.status = status;
+                    debt.notes = notes;
+                }
+            } else {
+                debts.push({
+                    id: Date.now(),
+                    creditor, amount, startDate, dueDate, interestRate, status, notes
+                });
+            }
+
+            saveData();
+            hideDebtForm();
+            loadDebtTable();
+        }
+
+        function loadDebtTable() {
+            const tbody = document.querySelector('#debtTable tbody');
+            tbody.innerHTML = '';
+
+            if (debts.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No debts recorded yet.</td></tr>`;
+                return;
+            }
+
+            let totalOutstanding = 0;
+
+            debts.forEach(debt => {
+                if (debt.status !== "Paid") totalOutstanding += debt.amount || 0;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${debt.creditor}</td>
+                    <td class="value-red">₹${debt.amount.toLocaleString('en-IN')}</td>
+                    <td>${debt.startDate || '-'}</td>
+                    <td>${debt.dueDate || '-'}</td>
+                    <td>${debt.interestRate}%</td>
+                    <td>${debt.status}</td>
+                    <td>
+                        <button class="btn btn-edit" onclick="showAddDebtForm(${debt.id})">Edit</button>
+                        <button class="btn btn-delete" onclick="deleteDebt(${debt.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'total-row';
+            totalRow.innerHTML = `
+                <td colspan="1"><strong>Total Outstanding</strong></td>
+                <td class="value-red"><strong>₹${totalOutstanding.toLocaleString('en-IN')}</strong></td>
+                <td colspan="5"></td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        function deleteDebt(id) {
+            if (confirm("Delete this debt record?")) {
+                debts = debts.filter(d => d.id !== id);
+                saveData();
+                loadDebtTable();
+            }
+        }
+        // ====================== DEBTS ======================
+        
+        // ====================== CALCULATORS ======================
+        function renderCalculators() {
+            const content = document.getElementById('content');
+            content.innerHTML = `
+                <h2>Financial Calculators</h2>
+                <div class="calc-selector">
+                    <button class="btn" onclick="loadCalculator('emi')">EMI Calculator</button>
+                    <button class="btn" onclick="loadCalculator('sip')">SIP / Future Value</button>
+                    <button class="btn" onclick="loadCalculator('pv')">Present Value</button>
+                    <button class="btn" onclick="loadCalculator('compound')">Compound Interest</button>
+                    <button class="btn" onclick="loadCalculator('inflation')">Inflation Calculator</button>
+                </div>
+                <div id="calculatorArea" class="calc-grid"></div>
+            `;
+            loadCalculator('emi');
+        }
+
+        function loadCalculator(type) {
+            const area = document.getElementById('calculatorArea');
+            area.innerHTML = '';
+
+            if (type === 'emi') {
+                area.innerHTML = `
+                    <div class="calc-card">
+                        <h3>EMI Calculator</h3>
+                        <label>Loan Amount (₹)</label><input type="number" id="emiP" value="5000000">
+                        <label>Annual Interest Rate (%)</label><input type="number" id="emiR" value="8.5" step="0.01">
+                        <label>Tenure (Years)</label><input type="number" id="emiN" value="20">
+                        <button class="btn btn-primary" onclick="calcEMI()">Calculate EMI</button>
+                        <div id="emiResult" class="result" style="display:none"></div>
+                        <canvas id="emiChart" height="90"></canvas>
+                    </div>
+                `;
+            } else if (type === 'sip') {
+                area.innerHTML = `
+                    <div class="calc-card">
+                        <h3>SIP / Future Value Calculator</h3>
+                        <label>Monthly Investment (₹)</label><input type="number" id="sipP" value="10000">
+                        <label>Expected Annual Return (%)</label><input type="number" id="sipR" value="12" step="0.01">
+                        <label>Investment Period (Years)</label><input type="number" id="sipN" value="20">
+                        <button class="btn btn-primary" onclick="calcSIP()">Calculate</button>
+                        <div id="sipResult" class="result" style="display:none"></div>
+                    </div>
+                `;
+            } else if (type === 'pv') {
+                area.innerHTML = `
+                    <div class="calc-card">
+                        <h3>Present Value Calculator</h3>
+                        <label>Future Value (₹)</label><input type="number" id="pvFV" value="10000000">
+                        <label>Annual Rate (%)</label><input type="number" id="pvR" value="8" step="0.01">
+                        <label>Years</label><input type="number" id="pvN" value="15">
+                        <button class="btn btn-primary" onclick="calcPV()">Calculate Present Value</button>
+                        <div id="pvResult" class="result" style="display:none"></div>
+                    </div>
+                `;
+            } else if (type === 'compound') {
+                area.innerHTML = `
+                    <div class="calc-card">
+                        <h3>Compound Interest Calculator</h3>
+                        <label>Principal (₹)</label><input type="number" id="ciP" value="1000000">
+                        <label>Annual Rate (%)</label><input type="number" id="ciR" value="10" step="0.01">
+                        <label>Time (Years)</label><input type="number" id="ciN" value="10">
+                        <label>Compounding Frequency</label>
+                        <select id="ciFreq"><option value="1">Yearly</option><option value="4">Quarterly</option><option value="12" selected>Monthly</option></select>
+                        <button class="btn btn-primary" onclick="calcCompound()">Calculate</button>
+                        <div id="ciResult" class="result" style="display:none"></div>
+                    </div>
+                `;
+            } else if (type === 'inflation') {
+                area.innerHTML = `
+                    <div class="calc-card">
+                        <h3>Inflation Calculator</h3>
+                        <label>Current Cost (₹)</label><input type="number" id="infP" value="500000">
+                        <label>Inflation Rate (%)</label><input type="number" id="infR" value="6" step="0.01">
+                        <label>Years Ahead</label><input type="number" id="infN" value="10">
+                        <button class="btn btn-primary" onclick="calcInflation()">Calculate Future Cost</button>
+                        <div id="infResult" class="result" style="display:none"></div>
+                    </div>
+                `;
+            }
+        }
+
+        // EMI Calculator
+        function calcEMI() {
+            const P = parseFloat(document.getElementById('emiP').value);
+            const R = parseFloat(document.getElementById('emiR').value) / 12 / 100;
+            const N = parseFloat(document.getElementById('emiN').value) * 12;
+
+            const EMI = P * R * Math.pow(1+R, N) / (Math.pow(1+R, N) - 1);
+            const totalPay = EMI * N;
+            const totalInterest = totalPay - P;
+
+            document.getElementById('emiResult').innerHTML = `
+                <strong>Monthly EMI:</strong> ₹${EMI.toFixed(2)}<br>
+                <strong>Total Payment:</strong> ₹${totalPay.toFixed(2)}<br>
+                <strong>Total Interest:</strong> ₹${totalInterest.toFixed(2)}
+            `;
+            document.getElementById('emiResult').style.display = 'block';
+        }
+
+        // SIP Calculator
+        function calcSIP() {
+            const P = parseFloat(document.getElementById('sipP').value);
+            const R = parseFloat(document.getElementById('sipR').value) / 12 / 100;
+            const N = parseFloat(document.getElementById('sipN').value) * 12;
+
+            const FV = P * (Math.pow(1+R, N) - 1) / R * (1 + R);
+            const invested = P * N;
+
+            document.getElementById('sipResult').innerHTML = `
+                <strong>Future Value:</strong> ₹${FV.toFixed(2)}<br>
+                <strong>Total Invested:</strong> ₹${invested.toFixed(2)}<br>
+                <strong>Wealth Gained:</strong> ₹${(FV - invested).toFixed(2)}
+            `;
+            document.getElementById('sipResult').style.display = 'block';
+        }
+
+        // Present Value
+        function calcPV() {
+            const FV = parseFloat(document.getElementById('pvFV').value);
+            const R = parseFloat(document.getElementById('pvR').value) / 100;
+            const N = parseFloat(document.getElementById('pvN').value);
+
+            const PV = FV / Math.pow(1 + R, N);
+            document.getElementById('pvResult').innerHTML = `<strong>Present Value:</strong> ₹${PV.toFixed(2)}`;
+            document.getElementById('pvResult').style.display = 'block';
+        }
+
+        // Compound Interest
+        function calcCompound() {
+            const P = parseFloat(document.getElementById('ciP').value);
+            const R = parseFloat(document.getElementById('ciR').value) / 100;
+            const N = parseFloat(document.getElementById('ciN').value);
+            const freq = parseFloat(document.getElementById('ciFreq').value);
+
+            const amount = P * Math.pow(1 + R/freq, freq * N);
+            document.getElementById('ciResult').innerHTML = `
+                <strong>Final Amount:</strong> ₹${amount.toFixed(2)}<br>
+                <strong>Interest Earned:</strong> ₹${(amount - P).toFixed(2)}
+            `;
+            document.getElementById('ciResult').style.display = 'block';
+        }
+
+        // Inflation Calculator
+        function calcInflation() {
+            const P = parseFloat(document.getElementById('infP').value);
+            const R = parseFloat(document.getElementById('infR').value) / 100;
+            const N = parseFloat(document.getElementById('infN').value);
+
+            const future = P * Math.pow(1 + R, N);
+            document.getElementById('infResult').innerHTML = `
+                <strong>Future Cost after ${N} years:</strong> ₹${future.toFixed(2)}
+            `;
+            document.getElementById('infResult').style.display = 'block';
+        }
+         // ====================== CALCULATORS ======================
+
+         // ====================== BACKUP & RESTORE ======================
+            function saveBackup() {
+            const backupData = {
+                bankAccounts, fixedDeposits, recurringDeposits, equityHoldings,
+                mutualFunds, etfs, bullion, realEstate, insurance, cards,
+                npsAccounts, cashHoldings, collections, debts,
+                backupDate: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `PersonalFinance_Backup_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            alert("✅ Backup saved successfully! Keep this file safe.");
+        }
+
+            function loadBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+
+                    // Restore all data
+                    if (data.bankAccounts) bankAccounts = data.bankAccounts;
+                    if (data.fixedDeposits) fixedDeposits = data.fixedDeposits;
+                    if (data.recurringDeposits) recurringDeposits = data.recurringDeposits;
+                    if (data.equityHoldings) equityHoldings = data.equityHoldings;
+                    if (data.mutualFunds) mutualFunds = data.mutualFunds;
+                    if (data.etfs) etfs = data.etfs;
+                    if (data.bullion) bullion = data.bullion;
+                    if (data.realEstate) realEstate = data.realEstate;
+                    if (data.insurance) insurance = data.insurance;
+                    if (data.cards) cards = data.cards;
+                    if (data.npsAccounts) npsAccounts = data.npsAccounts;
+                    if (data.cashHoldings) cashHoldings = data.cashHoldings;
+                    if (data.collections) collections = data.collections;
+                    if (data.debts) debts = data.debts;
+
+                    saveData();
+                    alert("✅ Data restored successfully from backup!");
+                    renderContent(); // Refresh current view
+                } catch (err) {
+                    alert("❌ Invalid backup file. Please select a valid JSON backup.");
+                }
+            };
+            reader.readAsText(file);
+        }
+        // ====================== BACKUP & RESTORE ======================
+
+        // ====================== FULL DASHBOARD ======================
+        // ====================== INTERACTIVE DASHBOARD ======================
+        function renderDashboard() {
+            const content = document.getElementById('content');
+
+            // Calculations
+            const totalBank = bankAccounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+            const totalFD = fixedDeposits.reduce((sum, f) => sum + (f.amount || 0), 0);
+            const totalEquity = equityHoldings.reduce((sum, e) => sum + (e.shares * e.currentPrice || 0), 0);
+            const totalMF = mutualFunds.reduce((sum, m) => sum + (m.currentValue || 0), 0);
+            const totalETF = etfs.reduce((sum, e) => sum + (e.units * e.currentPrice || 0), 0);
+            const totalBullion = bullion.reduce((sum, b) => sum + (b.currentValue || 0), 0);
+            const totalRE = realEstate.reduce((sum, r) => sum + (r.currentValue || 0), 0);
+            const totalNPS = npsAccounts.reduce((sum, n) => sum + (n.corpus || 0), 0);
+            const totalCash = cashHoldings.reduce((sum, c) => sum + (c.amount || 0), 0);
+            const totalCollections = collections.reduce((sum, c) => sum + (c.currentValue * c.quantity || 0), 0);
+
+            const totalAssets = totalBank + totalFD + totalEquity + totalMF + totalETF + totalBullion + totalRE + totalNPS + totalCash + totalCollections;
+            const totalDebt = debts.reduce((sum, d) => sum + (d.status !== "Paid" ? d.amount : 0), 0);
+            const netWorth = totalAssets - totalDebt;
+
+            let html = `
+                <h2>Net Worth Dashboard</h2>
+                <div style="margin:15px 0;">
+                    <button class="btn btn-export" onclick="exportToExcel()">📊 Export to Excel</button>
+                    <button class="btn btn-backup" onclick="saveBackup()">💾 Save Backup (JSON)</button>
+                    <label class="btn btn-restore" style="display:inline-block; cursor:pointer;">
+                        📂 Load Backup
+                        <input type="file" id="loadBackupInput" accept=".json" style="display:none" onchange="loadBackup(event)">
+                    </label>
+                </div>
+                
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3>Total Assets</h3>
+                        <div class="big-number value-green">₹${totalAssets.toLocaleString('en-IN')}</div>
+                    </div>
+                    <div class="card">
+                        <h3>Total Liabilities</h3>
+                        <div class="big-number value-red">₹${totalDebt.toLocaleString('en-IN')}</div>
+                    </div>
+                    <div class="card">
+                        <h3>Net Worth</h3>
+                        <div class="big-number" style="color: ${netWorth >= 0 ? '#10b981' : '#ef4444'}">
+                            ₹${netWorth.toLocaleString('en-IN')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <h3>Asset Allocation</h3>
+                    <canvas id="assetPieChart" height="120"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>Asset Breakdown (Bar Chart)</h3>
+                    <canvas id="assetBarChart" height="100"></canvas>
+                </div>
+
+                <h3 style="margin-top: 30px;">Detailed Asset Breakdown</h3>
+                <table>
+                    <thead><tr><th>Category</th><th>Value (₹)</th></tr></thead>
+                    <tbody>
+                        <tr><td>Bank Accounts</td><td>₹${totalBank.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>Fixed Deposits</td><td>₹${totalFD.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>Equity</td><td>₹${totalEquity.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>Mutual Funds</td><td>₹${totalMF.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>ETFs</td><td>₹${totalETF.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>Bullion & Gold/Silver</td><td>₹${totalBullion.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>Real Estate</td><td>₹${totalRE.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>NPS</td><td>₹${totalNPS.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>Cash</td><td>₹${totalCash.toLocaleString('en-IN')}</td></tr>
+                        <tr><td>Collections</td><td>₹${totalCollections.toLocaleString('en-IN')}</td></tr>
+                    </tbody>
+                </table>
+            `;
+
+            content.innerHTML += html;
+
+            // Render Charts
+            setTimeout(() => {
+                renderPieChart();
+                renderBarChart();
+            }, 300);
+        }
+
+        let pieChart, barChart;
+
+        function renderPieChart() {
+            const ctx = document.getElementById('assetPieChart');
+            if (pieChart) pieChart.destroy();
+
+            const data = {
+                labels: ['Equity', 'MF', 'ETF', 'Bullion', 'Real Estate', 'NPS', 'Bank+FD+Cash', 'Collections'],
+                datasets: [{
+                    data: [
+                        equityHoldings.reduce((s,e)=>s+(e.shares*e.currentPrice||0),0),
+                        mutualFunds.reduce((s,m)=>s+(m.currentValue||0),0),
+                        etfs.reduce((s,e)=>s+(e.units*e.currentPrice||0),0),
+                        bullion.reduce((s,b)=>s+(b.currentValue||0),0),
+                        realEstate.reduce((s,r)=>s+(r.currentValue||0),0),
+                        npsAccounts.reduce((s,n)=>s+(n.corpus||0),0),
+                        bankAccounts.reduce((s,a)=>s+(a.balance||0),0) + fixedDeposits.reduce((s,f)=>s+(f.amount||0),0) + cashHoldings.reduce((s,c)=>s+(c.amount||0),0),
+                        collections.reduce((s,c)=>s+(c.currentValue*c.quantity||0),0)
+                    ],
+                    backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#14b8a6', '#64748b', '#f97316']
+                }]
+            };
+
+            pieChart = new Chart(ctx, {
+                type: 'pie',
+                data: data,
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        function renderBarChart() {
+            const ctx = document.getElementById('assetBarChart');
+            if (barChart) barChart.destroy();
+
+            const labels = ['Bank+FD', 'Equity', 'MF', 'ETF', 'Bullion', 'RE', 'NPS', 'Cash', 'Collections'];
+            const values = [
+                bankAccounts.reduce((s,a)=>s+(a.balance||0),0) + fixedDeposits.reduce((s,f)=>s+(f.amount||0),0),
+                equityHoldings.reduce((s,e)=>s+(e.shares*e.currentPrice||0),0),
+                mutualFunds.reduce((s,m)=>s+(m.currentValue||0),0),
+                etfs.reduce((s,e)=>s+(e.units*e.currentPrice||0),0),
+                bullion.reduce((s,b)=>s+(b.currentValue||0),0),
+                realEstate.reduce((s,r)=>s+(r.currentValue||0),0),
+                npsAccounts.reduce((s,n)=>s+(n.corpus||0),0),
+                cashHoldings.reduce((s,c)=>s+(c.amount||0),0),
+                collections.reduce((s,c)=>s+(c.currentValue*c.quantity||0),0)
+            ];
+
+            barChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Value (₹)',
+                        data: values,
+                        backgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        // ====================== EXPORT TO EXCEL ======================
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+
+            // Helper function to add sheet
+            const addSheet = (name, data) => {
+                if (data.length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    XLSX.utils.book_append_sheet(wb, ws, name);
+                }
+            };
+
+            addSheet("Bank Accounts", bankAccounts);
+            addSheet("Fixed Deposits", fixedDeposits);
+            addSheet("Recurring Deposits", recurringDeposits);
+            addSheet("Equity Holdings", equityHoldings);
+            addSheet("Mutual Funds", mutualFunds);
+            addSheet("ETFs", etfs);
+            addSheet("Bullion", bullion);
+            addSheet("Real Estate", realEstate);
+            addSheet("Insurance", insurance);
+            addSheet("Cards", cards);
+            addSheet("NPS", npsAccounts);
+            addSheet("Cash Holdings", cashHoldings);
+            addSheet("Collections", collections);
+            addSheet("Debts", debts);
+
+            // Summary Sheet
+            const summary = [
+                { Category: "Total Assets", Value: Object.values({
+                    bank: bankAccounts.reduce((s,a)=>s+(a.balance||0),0),
+                    fd: fixedDeposits.reduce((s,f)=>s+(f.amount||0),0),
+                    equity: equityHoldings.reduce((s,e)=>s+(e.shares*e.currentPrice||0),0),
+                    mf: mutualFunds.reduce((s,m)=>s+(m.currentValue||0),0),
+                    etf: etfs.reduce((s,e)=>s+(e.units*e.currentPrice||0),0),
+                    bullion: bullion.reduce((s,b)=>s+(b.currentValue||0),0),
+                    re: realEstate.reduce((s,r)=>s+(r.currentValue||0),0),
+                    nps: npsAccounts.reduce((s,n)=>s+(n.corpus||0),0),
+                    cash: cashHoldings.reduce((s,c)=>s+(c.amount||0),0),
+                    collections: collections.reduce((s,c)=>s+(c.currentValue*c.quantity||0),0)
+                }).reduce((a,b)=>a+b,0) },
+                { Category: "Total Debts", Value: debts.reduce((s,d)=>s+(d.status!=="Paid"?d.amount:0),0) }
+            ];
+            addSheet("Net Worth Summary", summary);
+
+            // Download
+            XLSX.writeFile(wb, `Personal_Family_Finance_${new Date().toISOString().slice(0,10)}.xlsx`);
+            
+            alert("✅ Excel file downloaded successfully!");
+        }
+                 
+        
+        // Initialize App
+        renderTabs();
+        renderContent();
+    </script>
+</body>
+</html>
