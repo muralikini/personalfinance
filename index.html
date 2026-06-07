@@ -27,6 +27,17 @@
             color: var(--text); 
             transition: background 0.3s;
         }
+
+        /* Login Screen */
+        #loginScreen { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 9999; 
+        }
+        .login-box { 
+            background: var(--card); padding: 40px; border-radius: 16px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: 100%; max-width: 420px; text-align: center; 
+        }
+
         header { 
             background: #1e3a8a; 
             color: white; 
@@ -87,23 +98,45 @@
         }
         .big-number { font-size: 2.4rem; font-weight: bold; margin: 10px 0; }
         .chart-container { margin: 25px 0; }
+
+        
     </style>
 </head>
-<body>
-    <header>
+<body onload="initApp()">
+    <!-- ==================== LOGIN SCREEN ==================== -->
+    <div id="loginScreen">
+        <div class="login-box">
+            <h2>💰 Personal Finance Manager</h2>
+            <p><strong>Secure Access</strong></p>
+            <br>
+            <input type="password" id="passwordInput" placeholder="Enter Password" 
+                   style="width:100%; padding:16px; margin:15px 0; border-radius:8px; border:1px solid #ccc; font-size:16px;">
+            <button class="btn" onclick="login()" style="width:100%; background:#1e3a8a; color:white; padding:14px;">Login</button>
+            <p style="font-size:13px; margin-top:20px; color:#666;">
+                Default Password: <strong>family123</strong><br>
+                <em>Change it in the code after first login</em>
+            </p>
+        </div>
+    </div>
+    <header id="mainHeader">
        <h1>Personal Finance Manager</h1>
-        <button onclick="toggleDarkMode()" style="position:absolute; top:15px; right:20px; padding:8px 16px; background:#334155; color:white; border:none; border-radius:5px; cursor:pointer;">
+       <button onclick="toggleDarkMode()" style="position:absolute; top:15px; right:20px; padding:8px 16px; background:#334155; color:white; border:none; border-radius:5px; cursor:pointer;">
             🌙 Dark Mode
+        </button>
+        <button onclick="logout()" style="position:absolute; top:15px; right:140px; padding:8px 16px; background:#ef4444; color:white; border:none; border-radius:5px; cursor:pointer;">
+            Logout
         </button>
     </header>
 
-    <div class="container">
+   <div class="container" id="mainApp">
         <div class="tabs" id="tabs"></div>
         <div class="content" id="content"></div>
     </div>
 
     <script>
-       let currentTab = 'dashboard';
+        const APP_PASSWORD = "family123";   // ← CHANGE THIS TO A STRONG PASSWORD
+       
+        let currentTab = 'dashboard';
         let isDarkMode = localStorage.getItem('darkMode') === 'true';
 
         // Apply saved theme
@@ -150,6 +183,40 @@
             { id: 'calculator', name: 'Calculators' }
         ];
 
+        function initApp() {
+            if (localStorage.getItem('authenticated') === 'true') {
+                showMainApp();
+            }
+        }
+
+        function login() {
+            const entered = document.getElementById('passwordInput').value.trim();
+            if (entered === APP_PASSWORD) {
+                localStorage.setItem('authenticated', 'true');
+                showMainApp();
+            } else {
+                alert("❌ Incorrect Password");
+                document.getElementById('passwordInput').value = '';
+            }
+        }
+
+        function showMainApp() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('mainHeader').style.display = 'block';
+            document.getElementById('mainApp').style.display = 'block';
+            
+            renderTabs();
+            renderContent();
+        }
+
+        function logout() {
+            if (confirm("Logout from Personal Finance Manager?")) {
+                localStorage.removeItem('authenticated');
+                location.reload();
+            }
+        }
+
+        
         function saveData() {
             localStorage.setItem('bankAccounts', JSON.stringify(bankAccounts));
             localStorage.setItem('fixedDeposits', JSON.stringify(fixedDeposits));
@@ -262,6 +329,8 @@
             content.innerHTML += html;
             loadBankTable();
         }
+
+
 
         function showAddBankForm(editId = null) {
             document.getElementById('bankForm').style.display = 'block';
